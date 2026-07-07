@@ -44,12 +44,12 @@ Since **February 6, 2026**, X's official API has **no free tier for new develope
 
 ## Features
 
-- ✅ **Post** — text, images (chunked `INIT`/`APPEND`/`FINALIZE` upload), replies, **threads**, and **quote-tweets**
+- ✅ **Post** — text, **up to 4 images**, **GIF &amp; video** (with **alt text**), replies, **threads**, **quote-tweets**, **long-form note tweets**, and **scheduled** tweets
 - 🗑️ **Delete** — one id, a list of ids, or "find matching &amp; delete" cleanup loops
-- ❤️ **Engage** — like, retweet, bookmark — each with an undo
+- ❤️ **Engage** — like, retweet, bookmark, **follow, block, mute, pin** — each with an undo
 - 🌐 **Search all of X** — the real `SearchTimeline` (operators like `from:`, `min_faves:`, `filter:media`), plus local regex over your own tweets
-- 📖 **Read** — your timeline or any `@user`'s (paginated), or a single tweet by id
-- 🔌 **MCP server** — drop into Claude Desktop / Claude Code / Cursor; tools that **explain the cookie** and set it up with one paste
+- 📖 **Read** — your **home feed**, any timeline, a tweet's **replies/conversation**, **followers/following**, **likers/retweeters**, **bookmarks**, a user's **likes**, **notifications**, and full **profiles**
+- 🔌 **MCP server** — **40 tools**; drop into Claude Desktop / Claude Code / Cursor; tools that **explain the cookie** and set it up with one paste
 - 🔑 **Frictionless auth** — paste a `Cookie:` header, drop a **HAR** file, or a **storage-dump zip**; store in a file or the macOS **Keychain**
 - 🐍 **Python API** *and* a **CLI** (`tweetkit …`)
 - 🪶 Tiny footprint — no headless browser, no Selenium
@@ -117,15 +117,17 @@ tweetkit import --file ~/Downloads/x.com.har
 
 > Modern Chrome can **redact cookies** from exported HARs. If tweetkit reports `auth_token` missing, either enable **"Allow to generate HAR with sensitive data"** in the Network settings, or fall back to **Method A** / **Method C**.
 
-### Method C — a storage-dump browser extension (zip)
+### Method C — the **storagedump** browser extension (zip)
 
-Some browser extensions export browser storage (they use the `chrome.cookies` API, which **can** read HttpOnly cookies) as a `.zip` containing a `cookies.json`. tweetkit reads that directly:
+The easiest no-DevTools route. **[storagedump](https://chromewebstore.google.com/detail/storagedump/kihoghfekemdccfnpjefmggehpgnjnab)** (a Chrome extension built by this project's author) exports a tab's browser storage — including the **HttpOnly** `auth_token`, which `document.cookie` can't reach — as a `.zip` containing `cookies.json`. On x.com (logged in), click the extension → export, then:
 
 ```bash
 tweetkit import --file storagedump_x.com_2026-07-05.zip
 ```
 
-It accepts `cookies.json` shaped as `{ "data": [ { "key": "...", "value": "..." }, ... ] }` (the common storage-dump format), a plain list, or a `{name: value}` map. Cookie-Editor / EditThisCookie JSON exports (`--file export.json`) work too.
+tweetkit reads the extension's native format, `{ "data": [ { "key": "...", "value": "..." }, ... ] }`, and also accepts a plain list or a `{name: value}` map. Cookie-Editor / EditThisCookie JSON exports (`--file export.json`) work too.
+
+> Install: **[storagedump on the Chrome Web Store](https://chromewebstore.google.com/detail/storagedump/kihoghfekemdccfnpjefmggehpgnjnab)**.
 
 ### Where the cookie is stored
 
@@ -267,6 +269,13 @@ The raw cookie is never echoed back.
 | `get_tweet(tweet_id)` | Fetch one tweet by id |
 | `search_my_tweets(query, regex?, limit?)` | Find your own tweets (local filter — great for cleanup) |
 | `search_x(query, latest?, limit?)` | Search **all of X** (real search, supports operators) |
+| `post_note` / `schedule_tweet` / `unschedule_tweet` | Long-form note tweets; schedule / cancel |
+| `follow_user` / `unfollow_user` / `block_user` / `unblock_user` / `mute_user` / `unmute_user` | Social-graph actions |
+| `pin_tweet` / `unpin_tweet` | Pin / unpin to your profile |
+| `get_home_timeline` / `get_replies` / `get_notifications` / `get_bookmarks` | Feeds & conversations |
+| `get_user_profile` / `get_followers` / `get_following` / `get_likers` / `get_retweeters` / `get_user_likes` | People & profiles |
+
+> **Not (yet) supported:** DMs, polls (create/vote), Lists, profile editing, Spaces, hide-reply. These need a captured HAR of that exact action to pin down the endpoint — easy to add on request.
 
 ---
 

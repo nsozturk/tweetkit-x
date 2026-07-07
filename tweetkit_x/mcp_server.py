@@ -123,7 +123,9 @@ def import_cookie_from_file(path: str) -> dict:
       • a .har  — F12 → check "Preserve log" → right-click a request → "Save all
         as HAR". (If Chrome scrubbed sensitive data, auth_token will be missing;
         fall back to set_session_cookie with a hand-copied header.)
-      • a .zip  — a storage-dump extension export containing cookies.json.
+      • a .zip  — an export from the `storagedump` Chrome extension
+        (https://chromewebstore.google.com/detail/storagedump/kihoghfekemdccfnpjefmggehpgnjnab),
+        which can read the HttpOnly auth_token; contains cookies.json.
       • a .json — a Cookie-Editor / EditThisCookie export.
 
     Returns which cookies were found (names + lengths, never values).
@@ -301,6 +303,161 @@ def search_x(query: str, latest: bool = False, limit: int = 40) -> list[dict]:
     if err:
         return [{"error": err}]
     return _fmt(tk.search_x(query, product="Latest" if latest else "Top", limit=limit))
+
+
+# --------------------------------------------------------- compose (more)
+@mcp.tool()
+def post_note(text: str, image_path: str = "", reply_to: str = "") -> dict:
+    """Post a long-form (note) tweet — beyond the 280-char limit. Confirm the text first."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.post_note(text, image_path=image_path or None, reply_to=reply_to or None)
+
+
+@mcp.tool()
+def schedule_tweet(text: str, at_epoch: int) -> dict:
+    """Schedule a tweet for a future unix timestamp (seconds since epoch)."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.schedule(text, at_epoch)
+
+
+@mcp.tool()
+def unschedule_tweet(scheduled_tweet_id: str) -> dict:
+    """Cancel a previously scheduled tweet."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unschedule(scheduled_tweet_id)
+
+
+# ---------------------------------------------------- social graph actions
+@mcp.tool()
+def follow_user(username: str) -> dict:
+    """Follow @username. (Reversible with unfollow_user.)"""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.follow(username)
+
+
+@mcp.tool()
+def unfollow_user(username: str) -> dict:
+    """Unfollow @username."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unfollow(username)
+
+
+@mcp.tool()
+def block_user(username: str) -> dict:
+    """Block @username. Confirm first."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.block(username)
+
+
+@mcp.tool()
+def unblock_user(username: str) -> dict:
+    """Unblock @username."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unblock(username)
+
+
+@mcp.tool()
+def mute_user(username: str) -> dict:
+    """Mute @username (silent — they aren't notified)."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.mute(username)
+
+
+@mcp.tool()
+def unmute_user(username: str) -> dict:
+    """Unmute @username."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unmute(username)
+
+
+@mcp.tool()
+def pin_tweet(tweet_id: str) -> dict:
+    """Pin one of your tweets to your profile."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.pin(tweet_id)
+
+
+@mcp.tool()
+def unpin_tweet(tweet_id: str) -> dict:
+    """Unpin your pinned tweet."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unpin(tweet_id)
+
+
+# ------------------------------------------------------------- reads (more)
+def _fmt_users(users):
+    return [{"username": u["username"], "name": u.get("name"), "followers": u.get("followers"),
+             "verified": u.get("verified"), "url": u["url"]} for u in users]
+
+
+@mcp.tool()
+def get_home_timeline(following: bool = False, limit: int = 40) -> list[dict]:
+    """Your home feed. following=True → 'Following' (chronological); else 'For You'."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt(tk.home_timeline(following=following, limit=limit))
+
+
+@mcp.tool()
+def get_replies(tweet_id: str, limit: int = 50) -> list[dict]:
+    """Fetch a tweet's conversation (its replies)."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt(tk.get_replies(tweet_id, limit=limit))
+
+
+@mcp.tool()
+def get_bookmarks(limit: int = 100) -> list[dict]:
+    """Your bookmarked tweets."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt(tk.bookmarks(limit=limit))
+
+
+@mcp.tool()
+def get_user_likes(username: str, limit: int = 100) -> list[dict]:
+    """Tweets a user has liked."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt(tk.user_likes(username, limit=limit))
+
+
+@mcp.tool()
+def get_notifications(limit: int = 40) -> list[dict]:
+    """Your notifications timeline (mentions / engagement)."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt(tk.notifications(limit=limit))
+
+
+@mcp.tool()
+def get_user_profile(username: str) -> dict:
+    """A user's full profile: name, bio, follower/following/tweet counts, verified, created_at."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.user_profile(username)
+
+
+@mcp.tool()
+def get_followers(username: str, limit: int = 100) -> list[dict]:
+    """A user's followers."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt_users(tk.followers(username, limit=limit))
+
+
+@mcp.tool()
+def get_following(username: str, limit: int = 100) -> list[dict]:
+    """Accounts a user follows."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt_users(tk.following(username, limit=limit))
+
+
+@mcp.tool()
+def get_likers(tweet_id: str, limit: int = 100) -> list[dict]:
+    """Users who liked a tweet."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt_users(tk.likers(tweet_id, limit=limit))
+
+
+@mcp.tool()
+def get_retweeters(tweet_id: str, limit: int = 100) -> list[dict]:
+    """Users who retweeted a tweet."""
+    tk, err = _get_tk()
+    return [{"error": err}] if err else _fmt_users(tk.retweeters(tweet_id, limit=limit))
 
 
 def main():

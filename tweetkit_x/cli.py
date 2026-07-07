@@ -140,6 +140,92 @@ def _engage(a, method):
     return 0 if ok else 1
 
 
+def _print_tweets(tweets):
+    for t in tweets:
+        print(f"[{t['created_at']}] @{t['author']} {t['url']}")
+        print("  " + t["text"][:160].replace("\n", " "))
+    print(f"# {len(tweets)} tweets", file=sys.stderr)
+    return 0
+
+
+def _print_users(users):
+    for u in users:
+        print(f"@{u['username']}  {u.get('name') or ''}  ({u.get('followers','?')} followers)  {u['url']}")
+    print(f"# {len(users)} users", file=sys.stderr)
+    return 0
+
+
+def _cmd_note(a):
+    r = TweetKit(**_kw(a)).post_note(a.text, image_path=a.image, reply_to=a.reply_to)
+    print(json.dumps(r, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_schedule(a):
+    r = TweetKit(**_kw(a)).schedule(a.text, a.at, image_path=a.image)
+    print(json.dumps(r, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_unschedule(a):
+    r = TweetKit(**_kw(a)).unschedule(a.id)
+    print(json.dumps(r, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_profile(a):
+    print(json.dumps(TweetKit(**_kw(a)).user_profile(a.user), ensure_ascii=False))
+    return 0
+
+
+def _cmd_home(a):
+    return _print_tweets(TweetKit(**_kw(a)).home_timeline(following=a.following, limit=a.limit))
+
+
+def _cmd_replies(a):
+    return _print_tweets(TweetKit(**_kw(a)).get_replies(a.id, limit=a.limit))
+
+
+def _cmd_bookmarks(a):
+    return _print_tweets(TweetKit(**_kw(a)).bookmarks(limit=a.limit))
+
+
+def _cmd_likes(a):
+    return _print_tweets(TweetKit(**_kw(a)).user_likes(a.user, limit=a.limit))
+
+
+def _cmd_notifications(a):
+    return _print_tweets(TweetKit(**_kw(a)).notifications(limit=a.limit))
+
+
+def _cmd_followers(a):
+    return _print_users(TweetKit(**_kw(a)).followers(a.user, limit=a.limit))
+
+
+def _cmd_following(a):
+    return _print_users(TweetKit(**_kw(a)).following(a.user, limit=a.limit))
+
+
+def _cmd_likers(a):
+    return _print_users(TweetKit(**_kw(a)).likers(a.id, limit=a.limit))
+
+
+def _cmd_retweeters(a):
+    return _print_users(TweetKit(**_kw(a)).retweeters(a.id, limit=a.limit))
+
+
+def _user_action(a, method):
+    r = getattr(TweetKit(**_kw(a)), method)(a.user)
+    print(json.dumps({**r, "user": a.user}, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _tweet_action(a, method):
+    r = getattr(TweetKit(**_kw(a)), method)(a.id)
+    print(json.dumps({**r, "id": a.id}, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="tweetkit",
                                  description="Post/delete/read on X via your web session (no paid API).")
@@ -209,6 +295,50 @@ def build_parser():
         p = sub.add_parser(name, help=helptext)
         p.add_argument("ids", nargs="+")
         p.set_defaults(func=(lambda m: (lambda a: _engage(a, m)))(method))
+
+    # compose (more)
+    p = sub.add_parser("note", help="post a long-form (note) tweet, over 280 chars")
+    p.add_argument("text"); p.add_argument("--image", "-i"); p.add_argument("--reply-to")
+    p.set_defaults(func=_cmd_note)
+    p = sub.add_parser("schedule", help="schedule a tweet for a unix timestamp")
+    p.add_argument("text"); p.add_argument("at", type=int, help="unix epoch seconds")
+    p.add_argument("--image", "-i"); p.set_defaults(func=_cmd_schedule)
+    p = sub.add_parser("unschedule", help="cancel a scheduled tweet")
+    p.add_argument("id"); p.set_defaults(func=_cmd_unschedule)
+
+    # reads (more)
+    p = sub.add_parser("home", help="your home feed"); p.add_argument("--following", action="store_true")
+    p.add_argument("--limit", type=int, default=40); p.set_defaults(func=_cmd_home)
+    p = sub.add_parser("replies", help="a tweet's conversation/replies")
+    p.add_argument("id"); p.add_argument("--limit", type=int, default=50); p.set_defaults(func=_cmd_replies)
+    p = sub.add_parser("bookmarks", help="your bookmarks")
+    p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_bookmarks)
+    p = sub.add_parser("likes", help="tweets a user has liked")
+    p.add_argument("user"); p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_likes)
+    p = sub.add_parser("notifications", help="your notifications")
+    p.add_argument("--limit", type=int, default=40); p.set_defaults(func=_cmd_notifications)
+    p = sub.add_parser("profile", help="a user's full profile")
+    p.add_argument("user"); p.set_defaults(func=_cmd_profile)
+    p = sub.add_parser("followers", help="a user's followers")
+    p.add_argument("user"); p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_followers)
+    p = sub.add_parser("following", help="who a user follows")
+    p.add_argument("user"); p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_following)
+    p = sub.add_parser("likers", help="who liked a tweet")
+    p.add_argument("id"); p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_likers)
+    p = sub.add_parser("retweeters", help="who retweeted a tweet")
+    p.add_argument("id"); p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_retweeters)
+
+    # social graph — user actions
+    for name, method in [("follow", "follow"), ("unfollow", "unfollow"), ("block", "block"),
+                         ("unblock", "unblock"), ("mute", "mute"), ("unmute", "unmute")]:
+        p = sub.add_parser(name, help=f"{name} a user")
+        p.add_argument("user")
+        p.set_defaults(func=(lambda m: (lambda a: _user_action(a, m)))(method))
+    # pin/unpin — tweet actions
+    for name, method in [("pin", "pin"), ("unpin", "unpin")]:
+        p = sub.add_parser(name, help=f"{name} a tweet")
+        p.add_argument("id")
+        p.set_defaults(func=(lambda m: (lambda a: _tweet_action(a, m)))(method))
 
     return ap
 

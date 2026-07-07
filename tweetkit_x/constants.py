@@ -34,10 +34,29 @@ QUERY_IDS = {
     "DeleteBookmark": "Wlmlj2-xzyS1GN3a6cj-mQ",
     "TweetResultByRestId": "aFvUsJm2c-oDkJV75blV6g",
     "SearchTimeline": "M1jEez78PEfVfbQLvlWMvQ",
+    # compose
+    "CreateNoteTweet": "iCUB42lIfXf9qPKctjE5rQ",
+    "CreateScheduledTweet": "LCVzRQGxOaGnOnYH01NQXg",
+    "DeleteScheduledTweet": "CTOVqej0JBXAZSwkp1US0g",
+    # reads (timelines & connections)
+    "HomeTimeline": "gKia-nBM9kwuDEfSDeWMfQ",
+    "HomeLatestTimeline": "iCyHMXVutL66dZyvMtyChA",
+    "TweetDetail": "97JF30KziU00483E_8elBA",
+    "Followers": "kuFUYP9eV1FPoEy4N-pi7w",
+    "Following": "C1qZ6bs-L3oc_TKSZyxkXQ",
+    "Favoriters": "b3OrdeHDQfb9zRMC0fV3bw",
+    "Retweeters": "wfglZEC0MRgBdxMa_1a5YQ",
+    "Bookmarks": "-LGfdImKeQz0xS_jjUwzlA",
+    "Likes": "JR2gceKucIKcVNB_9JkhsA",
+    "NotificationsTimeline": "Ev6UMJRROInk_RMH2oVbBg",
 }
 
 GQL_BASE = "https://x.com/i/api/graphql"
 UPLOAD_URL = "https://upload.x.com/i/media/upload.json"
+# Legacy v1.1 REST base — still live for social-graph actions (follow/block/mute/pin)
+# and media metadata (alt text). Auth is the same cookie + bearer + csrf.
+V11_BASE = "https://api.x.com/1.1"
+MEDIA_METADATA_URL = "https://upload.x.com/1.1/media/metadata/create.json"
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
