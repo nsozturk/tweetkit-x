@@ -1,0 +1,22 @@
+# Smithery.ai deployment config — https://smithery.ai/docs
+runtime: "container"
+build:
+  dockerfile: "Dockerfile"
+startCommand:
+  type: "stdio"
+  configSchema:
+    type: "object"
+    required: []
+    properties:
+      cookie:
+        type: "string"
+        title: "X session cookie"
+        description: >-
+          Your X (Twitter) session cookie string — the `Cookie:` header from a
+          logged-in x.com request. Must contain auth_token and ct0. Obtain it via
+          F12 → Network → copy the request `cookie:` header (see the README).
+  commandFunction: |-
+    (config) => ({
+      command: "tweetkit-mcp",
+      env: config.cookie ? { TWEETKIT_COOKIE: config.cookie } : {}
+    })

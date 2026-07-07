@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.nsozturk/tweetkit-x",
+  "description": "Post, delete & read on X (Twitter) using your own logged-in web session — no paid API.",
+  "repository": {
+    "url": "https://github.com/nsozturk/tweetkit-x",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registry_type": "pypi",
+      "registry_base_url": "https://pypi.org",
+      "identifier": "tweetkit-x",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "package_arguments": [],
+      "environment_variables": [
+        {
+          "name": "TWEETKIT_COOKIE_KEYCHAIN",
+          "description": "macOS Keychain service name holding your X session cookie string (must contain auth_token + ct0). Alternatively set TWEETKIT_COOKIE (the raw cookie string) or TWEETKIT_COOKIE_FILE (a path).",
+          "is_required": false,
+          "is_secret": false
+        },
+        {
+          "name": "TWEETKIT_COOKIE_FILE",
+          "description": "Path to a file holding your X session cookie string (contains auth_token + ct0).",
+          "is_required": false,
+          "is_secret": false
+        }
+      ]
+    }
+  ]
+}

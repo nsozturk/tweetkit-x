@@ -32,8 +32,9 @@ tweetkit = "tweetkit_x.cli:main"
 tweetkit-mcp = "tweetkit_x.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/ns0bj/tweetkit-x"
-Issues = "https://github.com/ns0bj/tweetkit-x/issues"
+Homepage = "https://github.com/nsozturk/tweetkit-x"
+Repository = "https://github.com/nsozturk/tweetkit-x"
+Issues = "https://github.com/nsozturk/tweetkit-x/issues"
 
 [tool.setuptools]
 packages = ["tweetkit_x"]

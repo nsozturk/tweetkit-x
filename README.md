@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.nsozturk/tweetkit-x -->
+
 <p align="center">
   <img src="assets/header.png" alt="tweetkit-x — post, delete and read on X (Twitter) from Python & MCP using your own web session" width="100%">
 </p>
