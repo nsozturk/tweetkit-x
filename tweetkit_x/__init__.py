@@ -15,4 +15,4 @@ from . import importer
 
 __all__ = ["TweetKit", "load_cookie", "save_cookie", "parse_cookie",
            "has_auth", "CookieError", "importer"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -110,8 +110,8 @@ class TweetKit:
             raise RuntimeError(f"media FINALIZE {r.status_code}: {r.text[:200]}")
         return mid
 
-    def create_tweet(self, text, media_ids=None, reply_to=None):
-        """Post one tweet (optionally with media, optionally as a reply)."""
+    def create_tweet(self, text, media_ids=None, reply_to=None, quote_tweet_id=None):
+        """Post one tweet (optionally with media, as a reply, or quoting a tweet)."""
         qid = C.QUERY_IDS["CreateTweet"]
         path = f"/i/api/graphql/{qid}/CreateTweet"
         media_entities = [{"media_id": m, "tagged_users": []} for m in (media_ids or [])]
@@ -124,6 +124,8 @@ class TweetKit:
         if reply_to:
             variables["reply"] = {"in_reply_to_tweet_id": str(reply_to),
                                   "exclude_reply_user_ids": []}
+        if quote_tweet_id:
+            variables["attachment_url"] = f"https://x.com/i/status/{quote_tweet_id}"
         payload = {"variables": variables, "features": C.CREATE_TWEET_FEATURES, "queryId": qid}
         r = self._session.post(
             f"{C.GQL_BASE}/{qid}/CreateTweet", data=json.dumps(payload),
@@ -184,7 +186,112 @@ class TweetKit:
         """Delete several tweets; returns a list of per-id results."""
         return [dict(self.delete(t), tweet_id=str(t)) for t in tweet_ids]
 
+    def quote(self, text, quote_tweet_id, image_path=None):
+        """Quote-tweet an existing tweet, with optional image."""
+        mids = [self.upload_media(image_path)] if image_path else None
+        return self.create_tweet(text, mids, quote_tweet_id=quote_tweet_id)
+
+    # ------------------------------------------------------------ engagement
+    def _mutation(self, op, variables):
+        """POST a GraphQL mutation ({variables, queryId}); returns {ok,...} or {ok:False,error}."""
+        qid = C.QUERY_IDS[op]
+        path = f"/i/api/graphql/{qid}/{op}"
+        payload = {"variables": variables, "queryId": qid}
+        r = self._session.post(
+            f"{C.GQL_BASE}/{qid}/{op}", data=json.dumps(payload),
+            headers=self._headers("POST", path, {"content-type": "application/json"}),
+            timeout=self.timeout)
+        try:
+            j = r.json()
+        except Exception:
+            return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+        if j.get("errors"):
+            return {"ok": False, "status": r.status_code,
+                    "error": "; ".join(e.get("message", "?") for e in j["errors"])}
+        return {"ok": True, "data": j.get("data")}
+
+    def like(self, tweet_id):
+        """Like a tweet."""
+        return self._mutation("FavoriteTweet", {"tweet_id": str(tweet_id)})
+
+    def unlike(self, tweet_id):
+        """Remove a like."""
+        return self._mutation("UnfavoriteTweet", {"tweet_id": str(tweet_id)})
+
+    def retweet(self, tweet_id):
+        """Repost (retweet) a tweet."""
+        return self._mutation("CreateRetweet", {"tweet_id": str(tweet_id), "dark_request": False})
+
+    def unretweet(self, tweet_id):
+        """Undo a repost. Pass the id of the ORIGINAL tweet that was retweeted."""
+        return self._mutation("DeleteRetweet", {"source_tweet_id": str(tweet_id), "dark_request": False})
+
+    def bookmark(self, tweet_id):
+        """Bookmark a tweet (private)."""
+        return self._mutation("CreateBookmark", {"tweet_id": str(tweet_id)})
+
+    def unbookmark(self, tweet_id):
+        """Remove a bookmark."""
+        return self._mutation("DeleteBookmark", {"tweet_id": str(tweet_id)})
+
     # --------------------------------------------------------------- reading
+    def get_tweet(self, tweet_id):
+        """Fetch a single tweet by id (TweetResultByRestId). Returns a tweet dict or {ok:False}."""
+        qid = C.QUERY_IDS["TweetResultByRestId"]
+        path = f"/i/api/graphql/{qid}/TweetResultByRestId"
+        variables = {"tweetId": str(tweet_id), "withCommunity": False,
+                     "includePromotedContent": False, "withVoice": False}
+        params = {"variables": json.dumps(variables),
+                  "features": json.dumps(C.USER_TWEETS_FEATURES),
+                  "fieldToggles": json.dumps({"withArticleRichContentState": False})}
+        r = self._session.get(f"{C.GQL_BASE}/{qid}/TweetResultByRestId", params=params,
+                              headers=self._headers("GET", path), timeout=self.timeout)
+        if r.status_code != 200:
+            return {"ok": False, "status": r.status_code, "error": r.text[:200]}
+        tweets, users = {}, {}
+        _walk_timeline(r.json(), tweets, users)
+        if not tweets:
+            return {"ok": False, "error": "tweet not found or unavailable"}
+        t = next(iter(tweets.values()))
+        handle = users.get(t["author_id"], "i")
+        return {"ok": True, **t, "author": handle,
+                "url": f"https://x.com/{handle}/status/{t['id']}"}
+
+    def search_x(self, query, product="Top", limit=40):
+        """Search ALL of X — the real search, not a local filter (SearchTimeline).
+
+        `product`: 'Top' | 'Latest' | 'People' | 'Media'. Supports X search operators
+        (from:user, since:, min_faves:, filter:media, …). Returns a list of tweet dicts.
+        """
+        qid = C.QUERY_IDS["SearchTimeline"]
+        path = f"/i/api/graphql/{qid}/SearchTimeline"
+        tweets, users, cursor, pages = {}, {}, None, 0
+        while len(tweets) < limit and pages < 20:
+            pages += 1
+            variables = {"rawQuery": query, "count": 20,
+                         "querySource": "typed_query", "product": product}
+            if cursor:
+                variables["cursor"] = cursor
+            params = {"variables": json.dumps(variables),
+                      "features": json.dumps(C.USER_TWEETS_FEATURES)}
+            r = self._session.get(f"{C.GQL_BASE}/{qid}/SearchTimeline", params=params,
+                                  headers=self._headers("GET", path), timeout=self.timeout)
+            if r.status_code != 200:
+                raise RuntimeError(f"SearchTimeline HTTP {r.status_code}: {r.text[:200]}")
+            before = len(tweets)
+            next_cursor = _walk_timeline(r.json(), tweets, users)
+            if len(tweets) == before or not next_cursor:
+                break
+            cursor = next_cursor
+        out = []
+        for t in tweets.values():
+            handle = users.get(t["author_id"], "i")
+            out.append({**t, "author": handle,
+                        "url": f"https://x.com/{handle}/status/{t['id']}"})
+        out.sort(key=lambda x: x["created_at_ts"], reverse=True)
+        return out[:limit]
+
+    # ---------------------------------------------------------- reading (own)
     def user_id_by_name(self, username):
         """Resolve @username → numeric user id via UserByScreenName."""
         qid = C.QUERY_IDS["UserByScreenName"]

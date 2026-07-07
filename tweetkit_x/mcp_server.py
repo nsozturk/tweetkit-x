@@ -190,6 +190,57 @@ def delete_tweets(tweet_ids: list[str]) -> list[dict]:
     return tk.delete_many(list(tweet_ids))
 
 
+@mcp.tool()
+def quote_tweet(text: str, quote_tweet_id: str, image_path: str = "") -> dict:
+    """Quote-tweet an existing tweet (embed it with your own commentary). Optional image."""
+    tk, err = _get_tk()
+    if err:
+        return {"ok": False, "error": err}
+    return tk.quote(text, quote_tweet_id, image_path=image_path or None)
+
+
+@mcp.tool()
+def like_tweet(tweet_id: str) -> dict:
+    """Like a tweet."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.like(tweet_id)
+
+
+@mcp.tool()
+def unlike_tweet(tweet_id: str) -> dict:
+    """Remove a like from a tweet."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unlike(tweet_id)
+
+
+@mcp.tool()
+def retweet(tweet_id: str) -> dict:
+    """Repost (retweet) a tweet."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.retweet(tweet_id)
+
+
+@mcp.tool()
+def unretweet(tweet_id: str) -> dict:
+    """Undo a repost. Pass the id of the ORIGINAL tweet that was retweeted."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unretweet(tweet_id)
+
+
+@mcp.tool()
+def bookmark_tweet(tweet_id: str) -> dict:
+    """Bookmark a tweet (private — invisible to others)."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.bookmark(tweet_id)
+
+
+@mcp.tool()
+def unbookmark_tweet(tweet_id: str) -> dict:
+    """Remove a bookmark."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.unbookmark(tweet_id)
+
+
 # ---------------------------------------------------------------------- read
 def _fmt(tweets):
     return [{"id": t["id"], "text": t["text"], "created_at": t["created_at"],
@@ -219,14 +270,37 @@ def get_user_tweets(username: str, limit: int = 100) -> list[dict]:
 def search_my_tweets(query: str, regex: bool = False, limit: int = 200) -> list[dict]:
     """Find the authenticated user's own tweets matching `query`.
 
-    Local filter over your timeline (X's paid search API is not used). Set
-    regex=True to treat `query` as a case-insensitive regular expression —
-    handy for cleaning up, e.g. search_my_tweets("xmr|monero", regex=True).
+    Local filter over your timeline (X's search API is not used). Set regex=True
+    to treat `query` as a case-insensitive regular expression — handy for
+    cleaning up, e.g. search_my_tweets("xmr|monero", regex=True).
     """
     tk, err = _get_tk()
     if err:
         return [{"error": err}]
     return _fmt(tk.search(query, limit=limit, regex=regex))
+
+
+@mcp.tool()
+def get_tweet(tweet_id: str) -> dict:
+    """Fetch a single tweet by id (text, author, counts, url)."""
+    tk, err = _get_tk()
+    if err:
+        return {"ok": False, "error": err}
+    return tk.get_tweet(tweet_id)
+
+
+@mcp.tool()
+def search_x(query: str, latest: bool = False, limit: int = 40) -> list[dict]:
+    """Search ALL of X — the real search engine, not a local filter.
+
+    Supports X search operators: `from:user`, `to:user`, `#hashtag`, `min_faves:100`,
+    `filter:media`, `since:2026-01-01`, etc. Set latest=True for newest-first
+    (default is Top). Returns tweets from across X.
+    """
+    tk, err = _get_tk()
+    if err:
+        return [{"error": err}]
+    return _fmt(tk.search_x(query, product="Latest" if latest else "Top", limit=limit))
 
 
 def main():

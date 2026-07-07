@@ -25,6 +25,15 @@ QUERY_IDS = {
     "DeleteTweet": "VaenaVgh5q5ih7kvyVjgtg",
     "UserTweets": "hr4gzZONlq23okjU8fIe_A",
     "UserByScreenName": "2qvSHpkWTMS9i0zJAwDNiA",
+    # engagement + reads (query ids tracked from the maintained rettiwt-api set)
+    "FavoriteTweet": "lI07N6Otwv1PhnEgXILM7A",
+    "UnfavoriteTweet": "ZYKSe-w7KEslx3JhSIk5LA",
+    "CreateRetweet": "LFho5rIi4xcKO90p9jwG7A",
+    "DeleteRetweet": "iQtK4dl5hBmXewYZuEOKVw",
+    "CreateBookmark": "aoDbu3RHznuiSkQ9aNM67Q",
+    "DeleteBookmark": "Wlmlj2-xzyS1GN3a6cj-mQ",
+    "TweetResultByRestId": "aFvUsJm2c-oDkJV75blV6g",
+    "SearchTimeline": "M1jEez78PEfVfbQLvlWMvQ",
 }
 
 GQL_BASE = "https://x.com/i/api/graphql"

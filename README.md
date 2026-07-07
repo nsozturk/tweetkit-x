@@ -44,9 +44,11 @@ Since **February 6, 2026**, X's official API has **no free tier for new develope
 
 ## Features
 
-- ✅ **Post** — text, images (chunked `INIT`/`APPEND`/`FINALIZE` upload), replies, and full **threads**
+- ✅ **Post** — text, images (chunked `INIT`/`APPEND`/`FINALIZE` upload), replies, **threads**, and **quote-tweets**
 - 🗑️ **Delete** — one id, a list of ids, or "find matching &amp; delete" cleanup loops
-- 📖 **Read** — your own timeline or any `@user`'s, paginated; **local search/regex** over tweets
+- ❤️ **Engage** — like, retweet, bookmark — each with an undo
+- 🌐 **Search all of X** — the real `SearchTimeline` (operators like `from:`, `min_faves:`, `filter:media`), plus local regex over your own tweets
+- 📖 **Read** — your timeline or any `@user`'s (paginated), or a single tweet by id
 - 🔌 **MCP server** — drop into Claude Desktop / Claude Code / Cursor; tools that **explain the cookie** and set it up with one paste
 - 🔑 **Frictionless auth** — paste a `Cookie:` header, drop a **HAR** file, or a **storage-dump zip**; store in a file or the macOS **Keychain**
 - 🐍 **Python API** *and* a **CLI** (`tweetkit …`)
@@ -166,6 +168,19 @@ hits = tk.search(r"xmr|monero", regex=True)       # regex
 # delete
 tk.delete("1800000000000000000")
 tk.delete_many([t["id"] for t in hits])
+
+# quote-tweet
+tk.quote("this is great", quote_tweet_id="1800000000000000000")
+
+# engage (each has an undo)
+tk.like("1800000000000000000");     tk.unlike("1800000000000000000")
+tk.retweet("1800000000000000000");  tk.unretweet("1800000000000000000")
+tk.bookmark("1800000000000000000"); tk.unbookmark("1800000000000000000")
+
+# read a single tweet, and search ALL of X (real search + operators)
+tk.get_tweet("1800000000000000000")
+tk.search_x("mcp server", latest=True, limit=40)
+tk.search_x("from:jack min_faves:1000")     # X search operators work
 ```
 
 Every write returns `{'ok': True, 'id': '...', 'url': '...'}` on success, or `{'ok': False, 'status': ..., 'error': '...'}` on failure — easy to log or retry.
@@ -187,6 +202,10 @@ tweetkit tweets --limit 100                # your tweets
 tweetkit tweets @jack --limit 50           # someone else's
 tweetkit search monero                     # your tweets containing "monero"
 tweetkit search "xmr|monero" --regex
+tweetkit searchx "mcp server" --latest     # search ALL of X (real search + operators)
+tweetkit get 1800000000000000000           # one tweet by id
+tweetkit quote "great thread" 1800000000000000000
+tweetkit like 1800000000000000000          # also: unlike / retweet / unretweet / bookmark / unbookmark
 ```
 
 A `thread.txt` is just tweets separated by **blank lines**.
@@ -241,9 +260,13 @@ The raw cookie is never echoed back.
 | `import_cookie_from_file(path)` | Set auth from a HAR / storage-dump `.zip` / cookie JSON |
 | `post_tweet(text, image_path?, reply_to?)` | Post a tweet (optional image / reply) |
 | `post_thread(tweets[])` | Post a thread |
+| `quote_tweet(text, quote_tweet_id, image_path?)` | Quote-tweet an existing tweet |
 | `delete_tweet(tweet_id)` / `delete_tweets(ids[])` | Delete tweets |
+| `like_tweet` / `unlike_tweet` / `retweet` / `unretweet` / `bookmark_tweet` / `unbookmark_tweet` | Engage (each reversible) |
 | `get_my_tweets(limit?)` / `get_user_tweets(username, limit?)` | Read a timeline |
-| `search_my_tweets(query, regex?, limit?)` | Find your own tweets (great for cleanup) |
+| `get_tweet(tweet_id)` | Fetch one tweet by id |
+| `search_my_tweets(query, regex?, limit?)` | Find your own tweets (local filter — great for cleanup) |
+| `search_x(query, latest?, limit?)` | Search **all of X** (real search, supports operators) |
 
 ---
 

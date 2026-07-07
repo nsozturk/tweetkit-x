@@ -105,6 +105,41 @@ def _cmd_search(a):
     return 0
 
 
+def _cmd_searchx(a):
+    tk = TweetKit(**_kw(a))
+    product = "Latest" if a.latest else "Top"
+    tweets = tk.search_x(a.query, product=product, limit=a.limit)
+    for t in tweets:
+        print(f"[{t['created_at']}] @{t['author']} {t['url']}")
+        print(f"  ❤{t['likes']} 🔁{t['retweets']}  " + t["text"][:180].replace("\n", " "))
+        print()
+    print(f"# {len(tweets)} results (all of X, product={product})", file=sys.stderr)
+    return 0
+
+
+def _cmd_get(a):
+    r = TweetKit(**_kw(a)).get_tweet(a.id)
+    print(json.dumps(r, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_quote(a):
+    r = TweetKit(**_kw(a)).quote(a.text, a.quote_id, image_path=a.image)
+    print(json.dumps(r, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _engage(a, method):
+    tk = TweetKit(**_kw(a))
+    fn = getattr(tk, method)
+    ok = True
+    for tid in a.ids:
+        r = fn(tid)
+        print(json.dumps({**r, "tweet_id": tid}, ensure_ascii=False))
+        ok = ok and r.get("ok")
+    return 0 if ok else 1
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="tweetkit",
                                  description="Post/delete/read on X via your web session (no paid API).")
@@ -146,6 +181,34 @@ def build_parser():
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--regex", action="store_true", help="treat query as a regex")
     p.set_defaults(func=_cmd_search)
+
+    p = sub.add_parser("searchx", help="search ALL of X (real search, supports operators)")
+    p.add_argument("query")
+    p.add_argument("--limit", type=int, default=40)
+    p.add_argument("--latest", action="store_true", help="newest first (else Top)")
+    p.set_defaults(func=_cmd_searchx)
+
+    p = sub.add_parser("get", help="fetch a single tweet by id")
+    p.add_argument("id")
+    p.set_defaults(func=_cmd_get)
+
+    p = sub.add_parser("quote", help="quote-tweet an existing tweet")
+    p.add_argument("text")
+    p.add_argument("quote_id", help="id of the tweet to quote")
+    p.add_argument("--image", "-i", help="attach an image")
+    p.set_defaults(func=_cmd_quote)
+
+    for name, method, helptext in [
+        ("like", "like", "like tweet(s)"),
+        ("unlike", "unlike", "remove like(s)"),
+        ("retweet", "retweet", "repost tweet(s)"),
+        ("unretweet", "unretweet", "undo repost(s) (pass original id)"),
+        ("bookmark", "bookmark", "bookmark tweet(s) (private)"),
+        ("unbookmark", "unbookmark", "remove bookmark(s)"),
+    ]:
+        p = sub.add_parser(name, help=helptext)
+        p.add_argument("ids", nargs="+")
+        p.set_defaults(func=(lambda m: (lambda a: _engage(a, m)))(method))
 
     return ap
 
