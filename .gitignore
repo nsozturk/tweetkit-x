@@ -1,0 +1,21 @@
+# NEVER commit your session cookie / secrets
+cookie.txt
+*.cookie
+.env
+secrets/
+*storagedump*
+*.har
+*.zip
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# os
+.DS_Store

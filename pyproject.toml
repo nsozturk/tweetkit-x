@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tweetkit-x"
+version = "0.1.0"
+description = "Post, delete & read on X (Twitter) from Python & MCP using your own web session — no paid API."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "ns0bj" }]
+keywords = ["twitter", "x", "mcp", "tweet", "automation", "web-session"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Communications",
+]
+dependencies = [
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "x-client-transaction-id==0.0.1",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.2.0"]
+
+[project.scripts]
+tweetkit = "tweetkit_x.cli:main"
+tweetkit-mcp = "tweetkit_x.mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/ns0bj/tweetkit-x"
+Issues = "https://github.com/ns0bj/tweetkit-x/issues"
+
+[tool.setuptools]
+packages = ["tweetkit_x"]
