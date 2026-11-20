@@ -605,9 +605,19 @@ class TweetKit:
             return None
         res = self._bulk(usernames, act, journal_path or default_journal("follow"), dry_run,
                          max_actions, write_delay, read_delay, log,
-                         after=(lambda n: self.suggestions("follow", n, limit=suggestions_limit))
+                         after=self._post_follow_suggestions(suggestions_limit)
                          if capture_suggestions and not dry_run else None)
         return res
+
+    def _post_follow_suggestions(self, limit):
+        # the post-follow cluster (display_location=profile-cluster-follow) often comes back []; fall back to the profile sidebar
+        def after(name):
+            s = self.suggestions("follow", name, limit=limit)
+            if not s.get("count"):
+                s2 = self.suggestions("sidebar", name, limit=limit)
+                s = dict(s2, fetch_ids=(s.get("fetch_ids") or []) + (s2.get("fetch_ids") or []))
+            return s
+        return after
 
     def bulk_notifications(self, usernames, on=True, kind="posts", journal_path=None,
                            dry_run=False, max_actions=None, write_delay=None, read_delay=None,
