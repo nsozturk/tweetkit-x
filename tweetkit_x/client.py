@@ -197,13 +197,42 @@ class TweetKit:
                 for i, p in enumerate(paths[:4])] or None
         return self.create_tweet(text, mids, reply_to=reply_to)
 
+    @staticmethod
+    def thread_items(items):
+        """Normalize thread items to (text, [paths], [alt_texts]).
+
+        An item is a str, a (text, image_path) tuple, or a dict
+        {"text": ..., "images": [...], "alt_texts": [...]} (`image_path` also accepted).
+        Raises ValueError for a missing file or more than 4 media, so a thread is
+        checked completely before its first tweet is posted."""
+        out = []
+        for n, it in enumerate(items, 1):
+            if isinstance(it, str):
+                text, paths, alts = it, [], []
+            elif isinstance(it, dict):
+                text = it.get("text", "")
+                paths = list(it.get("images") or ([it["image_path"]] if it.get("image_path") else []))
+                alts = list(it.get("alt_texts") or [])
+            else:
+                text, paths, alts = it[0], ([it[1]] if len(it) > 1 and it[1] else []), []
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError(f"tweet {n}: empty text")
+            if len(paths) > 4:
+                raise ValueError(f"tweet {n}: {len(paths)} media files; X allows at most 4")
+            for p in paths:
+                if not os.path.isfile(os.path.expanduser(p)):
+                    raise ValueError(f"tweet {n}: file not found: {p}")
+            out.append((text, [os.path.expanduser(p) for p in paths], alts))
+        return out
+
     def post_thread(self, items):
-        """Post a thread. `items` = list of str, or (text, image_path) tuples.
-        Each tweet replies to the previous. Returns the per-tweet result list."""
+        """Post a thread. `items` = list of str, (text, image_path) tuples, or dicts
+        {"text", "images", "alt_texts"} (see `thread_items`). Every item is checked
+        before the first tweet is posted. Each tweet replies to the previous.
+        Returns the per-tweet result list; stops at the first failure."""
         results, reply_to = [], None
-        for it in items:
-            text, img = (it, None) if isinstance(it, str) else (it[0], it[1] if len(it) > 1 else None)
-            r = self.post(text, image_path=img, reply_to=reply_to)
+        for text, paths, alts in self.thread_items(items):
+            r = self.post(text, images=paths or None, alt_texts=alts or None, reply_to=reply_to)
             results.append(r)
             if not r.get("ok"):
                 break

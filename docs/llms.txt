@@ -1,0 +1,44 @@
+# tweetkit-x
+
+> tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.
+
+Unofficial: not affiliated with X Corp. Automating your web session is against X's Terms of Service and can get an account rate-limited, locked or suspended; the risk is the user's. Version 0.5.0, MIT, Python 3.10+.
+
+## What it does
+
+- Replays the internal HTTP calls x.com makes in the browser (GraphQL CreateTweet, DeleteTweet, UserTweets, SearchTimeline and others), authenticated with the user's session cookie (`auth_token` + `ct0`, `twid` recommended). No X developer app, no OAuth, no API key.
+- Post: text, up to 4 media files per tweet (PNG, JPEG, WebP, GIF, MP4) with alt text, replies, threads, quote tweets, long-form note tweets, scheduled tweets.
+- Delete one tweet or a list of ids. Like, retweet, bookmark, follow, block, mute, pin, each with an undo.
+- Read: your tweets, any user's tweets, one tweet, replies, home feed, bookmarks, likes, notifications, profiles, followers, following, likers, retweeters. Search all of X with X search operators, or regex over your own tweets.
+- Per-account notification bell, show/hide reposts, resumable rate-limited bulk follow, and X account suggestions saved to a local SQLite store.
+- MCP server (`tweetkit-mcp`, stdio) with 48 tools, including tools that set the session cookie from a pasted `Cookie:` header or a HAR / storage-dump zip / cookie JSON file.
+
+## New in 0.5.0
+
+- MCP `post_tweet(text, image_path?, reply_to?, images?, alt_texts?)`: `images` takes up to 4 local files with an optional parallel `alt_texts` list.
+- MCP `post_thread(tweets)`: each item is the tweet text or `{"text": "...", "images": ["/abs/path/a.png"], "alt_texts": ["..."]}` (up to 4 files per tweet).
+- Every tweet of a thread is checked before the first one is posted (empty text, missing file, more than 4 media): such an error posts nothing. A failure returned by X during posting still stops the thread at that tweet.
+- Python `TweetKit.post_thread` accepts the same dict items; `TweetKit.thread_items(items)` normalizes and validates them.
+
+## Install
+
+- PyPI currently has 0.3.0 (no multi-image MCP tools). For 0.5.0 install from GitHub: `pip install "tweetkit-x[mcp] @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0"`, or the wheel attached to the v0.5.0 GitHub release.
+- Library and CLI only: drop `[mcp]`.
+
+## Use
+
+- Import the cookie: `tweetkit import --paste` (paste the `Cookie:` request header from DevTools, then Ctrl-D), or `tweetkit import --file /abs/path/x.com.har`. Stored at `~/.config/tweetkit/cookie.txt` (mode 600) or in the macOS Keychain with `--keychain <slug>`.
+- Check: `tweetkit whoami` (no network call).
+- Python: `from tweetkit_x import TweetKit; tk = TweetKit(); tk.post("hello", images=["/abs/path/a.png"], alt_texts=["A chart"])`.
+- MCP client config: `{"mcpServers": {"tweetkit": {"command": "tweetkit-mcp", "env": {"TWEETKIT_COOKIE_KEYCHAIN": "tweetkit"}}}}`.
+- Tests without network: `python tests/test_media_tools.py` prints `media tools ok`; `pytest tests/` runs everything.
+
+## Links
+
+- [Documentation](https://nsozturk.github.io/tweetkit-x/)
+- [README](https://github.com/nsozturk/tweetkit-x/blob/main/README.md)
+- [AGENTS.md](https://github.com/nsozturk/tweetkit-x/blob/main/AGENTS.md)
+- [GLOBAL_AGENT_RULE.md](https://github.com/nsozturk/tweetkit-x/blob/main/GLOBAL_AGENT_RULE.md)
+- [Releases](https://github.com/nsozturk/tweetkit-x/releases)
+- [Source](https://github.com/nsozturk/tweetkit-x)
+- [PyPI](https://pypi.org/project/tweetkit-x/)

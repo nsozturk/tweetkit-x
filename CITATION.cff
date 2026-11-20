@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+type: software
+title: tweetkit-x
+version: 0.5.0
+date-released: "2026-11-21"
+license: MIT
+repository-code: "https://github.com/nsozturk/tweetkit-x"
+url: "https://nsozturk.github.io/tweetkit-x/"
+abstract: "tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API."
+authors:
+  - name: "tweetkit-x contributors"
+keywords:
+  - twitter
+  - x
+  - mcp
+  - mcp-server
+  - python
+  - cli
+  - automation

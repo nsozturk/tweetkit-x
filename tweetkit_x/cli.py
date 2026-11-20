@@ -2,7 +2,7 @@
 
     tweetkit import --paste                 # paste a Cookie: header, then Ctrl-D
     tweetkit import --file x.com.har         # HAR / storagedump.zip / cookie json
-    tweetkit import --file dump.zip --keychain tweetkit
+    tweetkit --keychain tweetkit import --file dump.zip
     tweetkit whoami
     tweetkit post "hello world"
     tweetkit post "with a pic" --image pic.png

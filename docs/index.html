@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tweetkit-x — post, delete and read on X (Twitter) from Python, a CLI and MCP</title>
+<meta name="description" content="tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.">
+<meta name="keywords" content="tweetkit-x, tweetkit, X, Twitter, MCP server, Model Context Protocol, post tweet, delete tweets, twitter thread, twitter images, alt text, Python, CLI, session cookie, no API key, X API alternative, Claude, Cursor">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://nsozturk.github.io/tweetkit-x/">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nsozturk.github.io/tweetkit-x/">
+<meta property="og:site_name" content="tweetkit-x documentation">
+<meta property="og:title" content="tweetkit-x: post, delete and read on X (Twitter) from Python, a CLI and MCP">
+<meta property="og:description" content="tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.">
+<meta property="og:image" content="https://nsozturk.github.io/tweetkit-x/assets/header.png">
+<meta property="og:image:width" content="2560">
+<meta property="og:image:height" content="800">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:url" content="https://nsozturk.github.io/tweetkit-x/">
+<meta name="twitter:title" content="tweetkit-x: post, delete and read on X (Twitter) from Python, a CLI and MCP">
+<meta name="twitter:description" content="tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.">
+<meta name="twitter:image" content="https://nsozturk.github.io/tweetkit-x/assets/header.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "tweetkit-x",
+  "description": "tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.",
+  "operatingSystem": "macOS, Linux, Windows",
+  "applicationCategory": "DeveloperApplication",
+  "softwareVersion": "0.5.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "codeRepository": "https://github.com/nsozturk/tweetkit-x",
+  "downloadUrl": "https://github.com/nsozturk/tweetkit-x/releases",
+  "url": "https://nsozturk.github.io/tweetkit-x/",
+  "image": "https://nsozturk.github.io/tweetkit-x/assets/header.png",
+  "programmingLanguage": "Python",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Does tweetkit-x need an X API key or a developer account?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. It uses your own logged-in x.com session cookie (auth_token and ct0) and makes the same internal calls the x.com web app makes. There is no developer app, no OAuth flow and no API key."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is tweetkit-x free?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It is MIT-licensed open source and does not call the paid X API, which since February 2026 has no free tier for new developers and is billed per use."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can it post images, GIFs and videos?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Each tweet can carry up to 4 local media files (PNG, JPEG, WebP, GIF or MP4) with optional alt text, from Python (tk.post with images and alt_texts) and from the MCP tool post_tweet. The CLI post command attaches one file."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can an AI agent post a thread with images?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, since 0.5.0. The MCP tool post_thread takes a list where each item is the tweet text or an object with text, images (up to 4 files) and alt_texts. Each tweet is posted as a reply to the previous one."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What happens if a file in a thread is missing?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Nothing is posted. Every tweet of the thread is checked before the first one goes out: empty text, a missing file or more than 4 media returns an error. If X itself rejects a tweet while the thread is being posted, posting stops there and the earlier tweets stay published."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I get my X session cookie?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Copy the cookie request header from DevTools (F12, Network, any x.com request) and run tweetkit import --paste, or import a HAR file or a storagedump extension zip with tweetkit import --file. Copying document.cookie does not work because auth_token is HttpOnly."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where is my cookie stored and where is it sent?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "In ~/.config/tweetkit/cookie.txt with mode 600, or in the macOS Keychain if you choose it. It is sent only to X's own hosts (x.com, upload.x.com, api.x.com) and is never printed."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can my X account get limited or suspended?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, that is possible. Automating your web session is against X's Terms of Service, and X can rate-limit, lock or suspend an account for it. Use it for your own account, at a human pace, at your own risk."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work on Linux and Windows?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It is pure Python 3.10+. The Keychain option is macOS only; on other systems keep the cookie in the file or in the TWEETKIT_COOKIE or TWEETKIT_COOKIE_FILE environment variables."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why does pip install version 0.3.0?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "PyPI still has 0.3.0. Version 0.5.0 ships as a GitHub release with a wheel and an sdist; install it with pip install \"tweetkit-x[mcp] @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0\" or from the release wheel."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is it an alternative to the official X API?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "For automating your own account, yes: posting, deleting, reading and searching without a developer account or per-use fees. It is not sanctioned by X, it can break when X changes its web app, and it is not suited to apps that act for other users."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does it not support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Direct messages, polls, Lists, profile editing, Spaces and hiding replies are not implemented."
+      }
+    }
+  ]
+}
+</script>
+
+<style>
+:root {
+  --bg: #000000;
+  --card-bg: #0d1117;
+  --sidebar-bg: #05070a;
+  --accent: #1d9bf0;
+  --accent-hover: #4cb3f4;
+  --accent-soft: rgba(29, 155, 240, 0.13);
+  --border: #1f2937;
+  --text: #e7e9ea;
+  --text-strong: #ffffff;
+  --muted: #8b98a5;
+  --code-bg: #0a0d12;
+  --warn-bg: rgba(244, 33, 46, 0.07);
+  --warn: #f4212e;
+  --ok: #00ba7c;
+  --nav-h: 60px;
+  --sidebar-w: 270px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 16px); }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.65; overflow-x: hidden; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+img { max-width: 100%; height: auto; display: block; }
+
+.navbar {
+  position: sticky; top: 0; z-index: 50; height: var(--nav-h);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 20px; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text-strong); text-decoration: none; font-weight: 800; font-size: 1.15rem; font-family: var(--mono); }
+.brand:hover { color: var(--text-strong); }
+.brand .dot { color: var(--accent); }
+.badge { font-family: var(--font); font-size: 0.72rem; font-weight: 600; color: #8ecdf8; background: var(--accent-soft); border: 1px solid var(--accent); padding: 1px 8px; border-radius: 999px; }
+.nav-actions { display: flex; align-items: center; gap: 14px; }
+.nav-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; }
+.nav-link:hover { color: var(--text-strong); }
+.btn-github { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid #2f3336; background: #0f1419; color: var(--text-strong); font-size: 0.85rem; font-weight: 600; text-decoration: none; }
+.btn-github:hover { background: #16202a; color: var(--text-strong); }
+.menu-btn { display: none; background: #0f1419; border: 1px solid #2f3336; color: var(--text-strong); border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }
+
+.layout { display: flex; max-width: 1400px; margin: 0 auto; }
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0; position: sticky; top: var(--nav-h);
+  height: calc(100vh - var(--nav-h)); overflow-y: auto; padding: 20px 14px 40px;
+  background: var(--sidebar-bg); border-right: 1px solid var(--border);
+}
+.search input {
+  width: 100%; padding: 8px 14px; border-radius: 999px; border: 1px solid #2f3336;
+  background: #0f1419; color: var(--text-strong); font-size: 0.88rem; outline: none;
+}
+.search input:focus { border-color: var(--accent); }
+.search-status { font-size: 0.78rem; color: var(--muted); min-height: 1.2em; margin: 6px 4px 14px; }
+.nav-group { margin-bottom: 18px; }
+.nav-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; padding-left: 10px; margin-bottom: 6px; }
+.nav-item { display: block; padding: 6px 10px; margin-bottom: 1px; border-left: 3px solid transparent; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 0.89rem; }
+.nav-item.sub { padding-left: 24px; font-size: 0.84rem; }
+.nav-item:hover { color: var(--text-strong); background: rgba(139, 152, 165, 0.08); }
+.nav-item.active { color: var(--text-strong); background: var(--accent-soft); border-left-color: var(--accent); }
+.nav-item.hidden, .nav-group.hidden { display: none; }
+
+main.content { flex: 1; min-width: 0; padding: 36px 56px 60px; max-width: 980px; }
+.banner-hero { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 28px; background: var(--card-bg); }
+.banner-hero img { width: 100%; }
+
+section { margin-bottom: 12px; }
+section.hidden { display: none; }
+h1 { font-size: 2.2rem; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; color: var(--text-strong); margin-bottom: 14px; }
+h2 { font-size: 1.6rem; font-weight: 700; color: var(--text-strong); margin: 44px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.15rem; font-weight: 650; color: var(--text-strong); margin: 26px 0 10px; }
+p { margin-bottom: 14px; }
+ul, ol { margin: 0 0 16px 22px; }
+li { margin-bottom: 6px; }
+.lead { font-size: 1.08rem; color: #d6d9db; }
+code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+p code, li code, td code, h3 code, summary code { background: #16202a; color: #e7e9ea; padding: 1px 6px; border-radius: 4px; }
+strong { color: var(--text-strong); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 20px; }
+.chip { font-size: 0.78rem; color: #8ecdf8; border: 1px solid #1d4f73; background: rgba(29, 155, 240, 0.08); padding: 2px 10px; border-radius: 999px; }
+
+.code-wrap { position: relative; margin: 12px 0 22px; }
+pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; padding-right: 76px; overflow-x: auto; line-height: 1.55; }
+pre code { font-size: 0.84rem; color: #e7e9ea; overflow-wrap: normal; white-space: pre; }
+.copy-btn { position: absolute; top: 9px; right: 9px; background: #16202a; color: var(--muted); border: 1px solid #2f3336; border-radius: 6px; padding: 3px 9px; font-size: 0.74rem; cursor: pointer; }
+.copy-btn:hover { color: var(--text-strong); background: #1c2a38; }
+.copy-btn.done { color: var(--ok); border-color: var(--ok); }
+.c { color: #6b7785; }
+
+.table-wrap { overflow-x: auto; margin: 14px 0 24px; border: 1px solid var(--border); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+th { background: var(--card-bg); color: var(--text-strong); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.tool { white-space: nowrap; }
+td.tool code { overflow-wrap: normal; }
+
+.callout { border: 1px solid var(--border); border-left: 4px solid var(--accent); background: var(--card-bg); border-radius: 10px; padding: 14px 18px; margin: 18px 0 22px; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+.callout-title { font-weight: 700; color: var(--text-strong); margin-bottom: 6px; }
+.callout ul { margin-bottom: 0; }
+.callout p:last-child { margin-bottom: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 18px 0 24px; }
+.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+.card h4 { color: var(--text-strong); font-size: 1rem; margin-bottom: 6px; }
+.card p { color: var(--muted); font-size: 0.89rem; margin: 0; }
+
+.shots { display: grid; grid-template-columns: 1fr; gap: 18px; margin: 18px 0 24px; }
+.shots figure { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.shots a { display: block; }
+.shots figcaption { padding: 10px 14px; font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--border); }
+
+.flow { display: flex; align-items: stretch; gap: 10px; margin: 20px 0 10px; }
+.flow-node { flex: 1; min-width: 0; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.flow-node.main { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft) inset; }
+.flow-node h4 { color: var(--text-strong); font-size: 0.98rem; margin-bottom: 4px; }
+.flow-node .where { font-family: var(--mono); font-size: 0.74rem; color: #8ecdf8; margin-bottom: 8px; overflow-wrap: anywhere; }
+.flow-node ul { margin: 0 0 0 16px; font-size: 0.84rem; color: #d6d9db; }
+.flow-node li { margin-bottom: 3px; }
+.flow-arrow { display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--muted); font-size: 0.72rem; text-align: center; min-width: 60px; }
+.flow-arrow .arr { font-size: 1.4rem; color: var(--accent); line-height: 1; }
+.flow-arrow .arr-v { display: none; }
+
+details.faq { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+details.faq summary { cursor: pointer; font-weight: 650; color: var(--text-strong); }
+details.faq[open] summary { margin-bottom: 8px; }
+details.faq p { margin-bottom: 0; }
+
+.no-results { display: none; padding: 30px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 10px; margin-top: 20px; }
+footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 0.84rem; color: var(--muted); text-align: center; }
+
+@media (max-width: 900px) {
+  .menu-btn { display: inline-block; }
+  .nav-link { display: none; }
+  .sidebar {
+    position: fixed; top: var(--nav-h); left: 0; z-index: 40; width: min(86vw, 320px);
+    transform: translateX(-105%); transition: transform 0.2s ease; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.6);
+  }
+  .sidebar.open { transform: none; }
+  main.content { padding: 22px 16px 48px; }
+  h1 { font-size: 1.7rem; }
+  h2 { font-size: 1.35rem; }
+  .flow { flex-direction: column; }
+  .flow-arrow { flex-direction: row; gap: 8px; min-width: 0; }
+  .flow-arrow .arr-h { display: none; }
+  .flow-arrow .arr-v { display: inline; }
+  table:not(.tools) { min-width: 560px; }
+  td.tool, td.tool code { white-space: normal; overflow-wrap: anywhere; }
+  table.tools td.tool { width: 52%; }
+}
+@media (max-width: 420px) {
+  .navbar { padding: 0 12px; }
+  .btn-github span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="navbar">
+  <a href="#overview" class="brand">tweetkit<span class="dot">-x</span> <span class="badge">v0.5.0</span></a>
+  <div class="nav-actions">
+    <a href="#install" class="nav-link">Install</a>
+    <a href="#mcp" class="nav-link">MCP server</a>
+    <a href="#python" class="nav-link">Python</a>
+    <button class="menu-btn" id="menuBtn" type="button" aria-controls="sidebar" aria-expanded="false">Menu</button>
+    <a href="https://github.com/nsozturk/tweetkit-x" target="_blank" rel="noopener" class="btn-github" aria-label="tweetkit-x on GitHub">
+      <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+      <span>GitHub</span>
+    </a>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="search">
+      <input type="search" id="docSearch" placeholder="Search the docs..." aria-label="Search the documentation" autocomplete="off">
+    </div>
+    <div class="search-status" id="searchStatus" aria-live="polite"></div>
+    <nav aria-label="Documentation sections">
+      <div class="nav-group">
+        <div class="nav-title">Getting started</div>
+        <a class="nav-item" href="#overview">Overview</a>
+        <a class="nav-item" href="#screenshots">Screenshots</a>
+        <a class="nav-item" href="#install">Install</a>
+        <a class="nav-item" href="#cookie">Get your session cookie</a>
+        <a class="nav-item sub" href="#cookie-header">A. Copy the Cookie header</a>
+        <a class="nav-item sub" href="#cookie-har">B. HAR file</a>
+        <a class="nav-item sub" href="#cookie-storagedump">C. storagedump zip</a>
+        <a class="nav-item sub" href="#cookie-storage">Where it is stored</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">Usage</div>
+        <a class="nav-item" href="#python">Python API</a>
+        <a class="nav-item" href="#cli">CLI</a>
+        <a class="nav-item" href="#mcp">MCP server</a>
+        <a class="nav-item sub" href="#mcp-config">Client config</a>
+        <a class="nav-item sub" href="#mcp-auth">Auth from the chat</a>
+        <a class="nav-item sub" href="#mcp-images">Images and threads (0.5.0)</a>
+        <a class="nav-item sub" href="#mcp-tools">All 48 tools</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">Reference</div>
+        <a class="nav-item" href="#how-it-works">How it works</a>
+        <a class="nav-item" href="#security">Security</a>
+        <a class="nav-item" href="#faq">FAQ</a>
+        <a class="nav-item" href="#alternatives">Alternatives</a>
+        <a class="nav-item" href="#agents">AI agent integration</a>
+        <a class="nav-item" href="#changelog">Changelog</a>
+        <a class="nav-item" href="#disclaimer">Disclaimer</a>
+        <a class="nav-item" href="#license">License</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="content" id="main">
+    <div class="banner-hero">
+      <img src="assets/header.png" onerror="this.onerror=null;this.src='../assets/header.png'" alt="tweetkit-x: post, delete and read on X (Twitter) from Python, a CLI and MCP with your own web session" width="1280" height="400">
+    </div>
+
+<section id="overview">
+  <h1>tweetkit-x</h1>
+  <p class="lead">tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.</p>
+  <div class="chips">
+    <span class="chip">Python 3.10+</span><span class="chip">MIT</span><span class="chip">MCP server, 48 tools</span><span class="chip">no X API key</span><span class="chip">macOS · Linux · Windows</span>
+  </div>
+  <p>It replays the HTTP calls x.com itself makes when you click <strong>Post</strong>, <strong>Delete</strong> or scroll a profile, authenticated with the session cookie your browser already has. There is no developer app, no OAuth flow and no API key. Since February 2026 the official X API has no free tier for new developers and is billed per use; tweetkit-x does not use it.</p>
+  <div class="grid">
+    <div class="card"><h4>Post</h4><p>Text, up to 4 images / GIF / video per tweet with alt text, replies, threads, quote tweets, long note tweets, scheduled tweets.</p></div>
+    <div class="card"><h4>Delete and engage</h4><p>Delete one id or a list. Like, retweet, bookmark, follow, block, mute, pin, each with an undo.</p></div>
+    <div class="card"><h4>Read and search</h4><p>Timelines, single tweets, replies, home feed, bookmarks, likes, notifications, profiles, followers. Search all of X with operators.</p></div>
+    <div class="card"><h4>Three interfaces</h4><p>A Python class (<code>TweetKit</code>), a CLI (<code>tweetkit</code>) and an MCP server (<code>tweetkit-mcp</code>) for Claude, Cursor and other MCP clients.</p></div>
+  </div>
+  <div class="callout warn">
+    <div class="callout-title">Read this first</div>
+    <p>Automating your web session is against X's Terms of Service. Your account can be rate-limited, locked or suspended, and that risk is yours. See the <a href="#disclaimer">Disclaimer</a>.</p>
+  </div>
+</section>
+
+<section id="screenshots">
+  <h2>Screenshots</h2>
+  <div class="shots">
+    <figure>
+      <a href="assets/screenshots/01-mcp-thread.png" target="_blank" rel="noopener">
+        <img src="assets/screenshots/01-mcp-thread.png" loading="lazy" width="1600" height="1000" alt="An agent calls the tweetkit-x MCP tool post_thread with three tweets, two of them with images and alt text; each tweet returns ok with its id and URL, and a second call with a missing image file returns an error and posts nothing">
+      </a>
+      <figcaption>The MCP tool <code>post_thread</code> with images per tweet. Every file is checked first; a missing file returns an error and nothing is posted. Rendered by <code>scripts/make_screenshots.py</code>, which runs the real MCP tool against an in-memory stand-in for X.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <p>Requirements: Python 3.10 or newer, and an X account you are logged in to in a browser.</p>
+  <div class="callout">
+    <div class="callout-title">PyPI still serves 0.3.0</div>
+    <p>Version 0.5.0 (multi-image <code>post_tweet</code> and image threads over MCP) ships as a GitHub release with a wheel and an sdist. Until PyPI is updated, install 0.5.0 from GitHub:</p>
+  </div>
+<pre><code><span class="c"># library + CLI + MCP server, version 0.5.0 from the GitHub tag</span>
+pip install "tweetkit-x[mcp] @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0"
+
+<span class="c"># or download the wheel from the v0.5.0 release page and install it</span>
+pip install "./tweetkit_x-0.5.0-py3-none-any.whl[mcp]"
+
+<span class="c"># library + CLI only (no MCP dependency)</span>
+pip install "tweetkit-x @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0"</code></pre>
+  <p><code>pip install "tweetkit-x[mcp]"</code> from PyPI works too, but gives you 0.3.0 until a newer version is uploaded. Releases: <a href="https://github.com/nsozturk/tweetkit-x/releases">github.com/nsozturk/tweetkit-x/releases</a>.</p>
+  <p>Dependencies: <code>requests</code>, <code>beautifulsoup4</code>, <code>lxml</code>, <code>x-client-transaction-id==0.0.1</code>, and <code>mcp&gt;=1.2.0</code> for the server. No headless browser, no Selenium.</p>
+  <h3>First run</h3>
+<pre><code>tweetkit import --paste          <span class="c"># paste the Cookie: header, then Ctrl-D</span>
+tweetkit whoami                  <span class="c"># {"ready": true, "user_id": "...", "ct0_len": 160}  (no network call)</span>
+tweetkit post "hello world"</code></pre>
+</section>
+
+<section id="cookie">
+  <h2>Get your session cookie</h2>
+  <p>The only secret tweetkit-x needs is your X <strong>session cookie</strong>: the <code>Cookie:</code> header your logged-in browser sends to x.com.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Cookie</th><th>What it is</th><th>Required</th><th>HttpOnly</th></tr></thead>
+    <tbody>
+      <tr><td><code>auth_token</code></td><td>your login session token</td><td>yes</td><td>yes (hidden from <code>document.cookie</code>)</td></tr>
+      <tr><td><code>ct0</code></td><td>CSRF token, sent back as the <code>x-csrf-token</code> header</td><td>yes</td><td>no</td></tr>
+      <tr><td><code>twid</code></td><td>your user id (<code>u=&lt;id&gt;</code>), lets tweetkit read your own timeline without a lookup</td><td>recommended</td><td>no</td></tr>
+    </tbody>
+  </table></div>
+  <p>Because <code>auth_token</code> is HttpOnly, copying <code>document.cookie</code> in the JavaScript console does <strong>not</strong> work. Use one of these three methods.</p>
+
+  <h3 id="cookie-header">Method A: copy the Cookie header (one paste)</h3>
+  <ol>
+    <li>Open x.com while logged in.</li>
+    <li>Open DevTools (F12) and the <strong>Network</strong> tab.</li>
+    <li>Click any request to x.com (for example <code>HomeTimeline</code>).</li>
+    <li>Under <strong>Request Headers</strong>, copy the whole value of <code>cookie:</code>.</li>
+  </ol>
+<pre><code>tweetkit import --paste
+<span class="c"># paste the header, then press Ctrl-D</span></code></pre>
+  <p>It looks like <code>auth_token=&lt;your auth_token&gt;; ct0=&lt;your ct0&gt;; twid=u%3D&lt;your id&gt;; ...</code>.</p>
+
+  <h3 id="cookie-har">Method B: a HAR file</h3>
+  <ol>
+    <li>On x.com (logged in) open DevTools (F12), <strong>Network</strong>, tick <strong>Preserve log</strong>, reload.</li>
+    <li>Right-click any request and choose <strong>Save all as HAR</strong>.</li>
+  </ol>
+<pre><code>tweetkit import --file ~/Downloads/x.com.har</code></pre>
+  <p>Recent Chrome versions can strip cookies from exported HARs. If tweetkit reports <code>auth_token</code> missing, enable "Allow to generate HAR with sensitive data" in the Network settings, or use method A or C.</p>
+
+  <h3 id="cookie-storagedump">Method C: the storagedump extension (zip)</h3>
+  <p><a href="https://chromewebstore.google.com/detail/storagedump/kihoghfekemdccfnpjefmggehpgnjnab">storagedump</a> is a Chrome extension by the same author that exports a tab's storage, including the HttpOnly <code>auth_token</code>, as a <code>.zip</code> with <code>cookies.json</code>.</p>
+<pre><code>tweetkit import --file ~/Downloads/storagedump_x.com.zip</code></pre>
+  <p>Cookie-Editor and EditThisCookie JSON exports (<code>--file export.json</code>) work too.</p>
+
+  <h3 id="cookie-storage">Where the cookie is stored</h3>
+  <p><code>tweetkit import</code> writes <code>~/.config/tweetkit/cookie.txt</code> with mode 600 (or another path with <code>--out</code>). On macOS you can keep it in the Keychain instead:</p>
+<pre><code>tweetkit import --paste --keychain tweetkit
+export TWEETKIT_COOKIE_KEYCHAIN=tweetkit</code></pre>
+  <p>At runtime the first source found wins:</p>
+  <ol>
+    <li>the <code>cookie=</code> argument (Python) </li>
+    <li>the <code>TWEETKIT_COOKIE</code> environment variable (the full cookie string)</li>
+    <li>the <code>cookie_file=</code> argument / <code>--cookie-file</code>, then <code>TWEETKIT_COOKIE_FILE</code></li>
+    <li><code>./cookie.txt</code> in the current directory</li>
+    <li><code>~/.config/tweetkit/cookie.txt</code></li>
+    <li>the macOS Keychain: <code>keychain_slug=</code> / <code>--keychain</code>, or <code>TWEETKIT_COOKIE_KEYCHAIN</code></li>
+  </ol>
+  <p>Note that a Keychain slug is checked last, so a <code>cookie.txt</code> in the current directory or in <code>~/.config/tweetkit/</code> takes precedence over it.</p>
+</section>
+
+<section id="python">
+  <h2>Python API</h2>
+<pre><code>from tweetkit_x import TweetKit
+
+tk = TweetKit()                                   <span class="c"># or TweetKit(keychain_slug="tweetkit") / TweetKit(cookie="auth_token=...; ct0=...")</span>
+tk.whoami()                                       <span class="c"># {'ready': True, 'user_id': '...', 'ct0_len': 160}, no network</span>
+
+<span class="c"># post: text, one image, up to 4 media with alt text, a reply</span>
+tk.post("hello world")
+tk.post("with a picture", image_path="/abs/path/chart.png")
+tk.post("two charts", images=["/abs/path/a.png", "/abs/path/b.png"],
+        alt_texts=["Revenue by month", "Users by month"])
+tk.post("a reply", reply_to="1800000000000000000")
+
+<span class="c"># thread: strings, (text, image_path) tuples, or dicts; each tweet replies to the previous</span>
+tk.post_thread([
+    {"text": "1/ I built a thing", "images": ["/abs/path/banner.png"], "alt_texts": ["Project banner"]},
+    "2/ how it works ...",
+    ("3/ the result", "/abs/path/result.png"),
+])
+
+<span class="c"># read</span>
+mine = tk.get_tweets(limit=100)                   <span class="c"># your tweets, newest first</span>
+theirs = tk.get_tweets(username="someuser", limit=50)
+tk.get_tweet("1800000000000000000")
+
+<span class="c"># search your own tweets (local filter) or all of X (real search, operators work)</span>
+hits = tk.search(r"xmr|monero", regex=True)
+tk.search_x("mcp server", product="Latest", limit=40)   <span class="c"># product: Top | Latest | People | Media</span>
+tk.search_x("from:someuser min_faves:1000")
+
+<span class="c"># delete</span>
+tk.delete("1800000000000000000")
+tk.delete_many([t["id"] for t in hits])
+
+<span class="c"># more</span>
+tk.quote("worth reading", quote_tweet_id="1800000000000000000")
+tk.like("1800000000000000000");    tk.unlike("1800000000000000000")
+tk.retweet("1800000000000000000"); tk.unretweet("1800000000000000000")
+tk.post_note("a long-form note tweet over 280 characters ...")
+tk.schedule("later", at_epoch=1893456000)
+tk.follow("someuser", notify=True, dry_run=True)
+tk.home_timeline(following=True, limit=40)</code></pre>
+  <p>Every write returns <code>{'ok': True, 'id': '...', 'url': '...'}</code> on success or <code>{'ok': False, 'status': ..., 'error': '...'}</code> on failure. <code>post_thread</code> returns one result per tweet and stops at the first failure.</p>
+  <h3>Thread items and validation</h3>
+  <p><code>TweetKit.thread_items(items)</code> normalizes every item to <code>(text, [paths], [alt_texts])</code> and raises <code>ValueError</code> for empty text, a missing file or more than 4 media in one tweet. <code>post_thread</code> calls it before posting anything, so those errors post nothing. Paths may start with <code>~</code>. Supported media: PNG, JPEG, WebP, GIF and MP4 (the client also maps <code>.mov</code> and <code>.m4v</code>). Videos are uploaded in 4 MB chunks and polled until X has processed them.</p>
+  <p>Note: <code>tk.post(images=[...])</code> uploads the first 4 files and ignores the rest without an error; the MCP tools and <code>post_thread</code> reject more than 4 instead.</p>
+</section>
+
+<section id="cli">
+  <h2>CLI</h2>
+  <p>The <code>tweetkit</code> command prints JSON. Global options: <code>--cookie-file PATH</code> and <code>--keychain SLUG</code>.</p>
+<pre><code><span class="c"># auth</span>
+tweetkit import --paste | --file PATH [--out PATH] [--keychain SLUG]
+tweetkit whoami
+
+<span class="c"># post and delete</span>
+tweetkit post "just some text"
+tweetkit post "text + media" --image pic.png
+tweetkit post "a reply" --reply-to 1800000000000000000
+tweetkit thread thread.txt                  <span class="c"># tweets separated by blank lines (text only)</span>
+tweetkit quote "great thread" 1800000000000000000 [--image pic.png]
+tweetkit note "a long-form tweet ..." [--image pic.png] [--reply-to ID]
+tweetkit schedule "later" 1893456000 [--image pic.png]
+tweetkit unschedule SCHEDULED_ID
+tweetkit delete 1800000000000000000 1800000000000000001
+
+<span class="c"># engage (one or more ids)</span>
+tweetkit like ID ...        <span class="c"># also: unlike, retweet, unretweet, bookmark, unbookmark</span>
+tweetkit pin ID             <span class="c"># also: unpin</span>
+
+<span class="c"># read and search</span>
+tweetkit tweets [@user] --limit 100
+tweetkit search "xmr|monero" [@user] --regex
+tweetkit searchx "mcp server" --latest --limit 40
+tweetkit get ID
+tweetkit home [--following]     tweetkit replies ID      tweetkit bookmarks
+tweetkit likes @user            tweetkit notifications   tweetkit profile @user
+tweetkit followers @user        tweetkit following @user
+tweetkit likers ID              tweetkit retweeters ID
+
+<span class="c"># people</span>
+tweetkit follow @user [--notify] [--dry-run]
+tweetkit unfollow @user     <span class="c"># also: block, unblock, mute, unmute</span>
+tweetkit friendship @user
+tweetkit notify @user on|off [--live] [--dry-run]
+tweetkit retweets @user on|off [--dry-run]
+
+<span class="c"># bulk (resumable, journaled, 30-75 s between writes)</span>
+tweetkit bulk-follow handles.csv --dry-run
+tweetkit bulk-notify handles.txt on --max 20
+
+<span class="c"># account suggestions (saved to ~/.config/tweetkit/suggestions.sqlite)</span>
+tweetkit suggest @user --source follow
+tweetkit suggestions --export suggestions.csv</code></pre>
+  <p>On the CLI, <code>post --image</code> takes one file and <code>thread</code> is text only. Several images per tweet and images inside threads are available from Python and MCP.</p>
+</section>
+
+<section id="mcp">
+  <h2>MCP server</h2>
+  <p><code>tweetkit-mcp</code> is a stdio MCP server (FastMCP) for Claude Desktop, Claude Code, Cursor and other MCP clients. It has 48 tools and can set up the session cookie from inside the chat.</p>
+
+  <h3 id="mcp-config">Client config</h3>
+  <p>Add this to your client's MCP config (<code>claude_desktop_config.json</code>, <code>.mcp.json</code>, Cursor settings):</p>
+<pre><code>{
+  "mcpServers": {
+    "tweetkit": {
+      "command": "tweetkit-mcp",
+      "env": { "TWEETKIT_COOKIE_KEYCHAIN": "tweetkit" }
+    }
+  }
+}</code></pre>
+  <p>Without a local install, run it through <code>uvx</code> from the v0.5.0 tag:</p>
+<pre><code>{
+  "mcpServers": {
+    "tweetkit": {
+      "command": "uvx",
+      "args": ["--from", "tweetkit-x[mcp] @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0", "tweetkit-mcp"]
+    }
+  }
+}</code></pre>
+  <p>The env block is optional. <code>TWEETKIT_COOKIE</code> (the cookie string) and <code>TWEETKIT_COOKIE_FILE</code> work as well. With no cookie the server still starts and asks for one in the chat.</p>
+
+  <h3 id="mcp-auth">Auth from the chat</h3>
+  <ol>
+    <li>The client calls <code>auth_status</code> and gets "not authenticated".</li>
+    <li>The server's instructions tell the assistant what <code>auth_token</code> and <code>ct0</code> are and how to copy the <code>Cookie:</code> header.</li>
+    <li>You paste it once: <code>set_session_cookie(cookie_header)</code>. Or point <code>import_cookie_from_file(path)</code> at a HAR, storage-dump zip or cookie JSON. A path that starts with <code>~</code> works too.</li>
+  </ol>
+  <p>The cookie is saved (Keychain if <code>TWEETKIT_COOKIE_KEYCHAIN</code> is set, otherwise <code>~/.config/tweetkit/cookie.txt</code>) and activated. Tools report cookie names and lengths, never values.</p>
+
+  <h3 id="mcp-images">Images and threads (new in 0.5.0)</h3>
+  <ul>
+    <li><code>post_tweet(text, image_path?, reply_to?, images?, alt_texts?)</code>: <code>images</code> takes up to 4 local files (PNG, JPEG, WebP, GIF or MP4) with an optional parallel <code>alt_texts</code> list. <code>image_path</code> (one file) still works.</li>
+    <li><code>post_thread(tweets)</code>: each item is either the tweet text or an object <code>{"text": "...", "images": [...], "alt_texts": [...]}</code> with up to 4 files per tweet.</li>
+    <li>Every tweet of the thread (text and files) is checked before the first tweet is posted. A missing file or more than 4 media returns an error and nothing is posted.</li>
+    <li>An error that X returns while the thread is being posted still stops it at that tweet; the tweets before it stay published.</li>
+  </ul>
+  <p>Before 0.5.0 the MCP tools could attach only one image and <code>post_thread</code> took text only, although the Python API could do more.</p>
+<pre><code>post_thread(tweets=[
+  {"text": "1/ I built a thing", "images": ["/abs/path/banner.png"], "alt_texts": ["Project banner"]},
+  "2/ how it works ...",
+  {"text": "3/ the result", "images": ["/abs/path/a.png", "/abs/path/b.png"]}
+])
+<span class="c"># -> [{"ok": true, "id": "...", "url": "https://x.com/i/status/..."}, ... one per tweet]</span>
+
+post_thread(tweets=["1/ ok", {"text": "2/ oops", "images": ["/abs/path/missing.png"]}])
+<span class="c"># -> [{"ok": false, "error": "tweet 2: file not found: /abs/path/missing.png"}]  (nothing posted)</span></code></pre>
+  <p>Checked without network by <code>python tests/test_media_tools.py</code>, which prints <code>media tools ok</code>; <code>pytest tests/</code> runs all tests.</p>
+
+  <h3 id="mcp-tools">All 48 tools</h3>
+  <p>Writes publish to your real, public account. The server tells the assistant to confirm the text, files and ids with you first.</p>
+
+  <h3>Auth (3)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>auth_status()</code></td><td>Is a valid session cookie loaded? Returns <code>authenticated</code>, <code>user_id</code>, <code>ct0_len</code>. Call first.</td></tr>
+      <tr><td class="tool"><code>set_session_cookie(cookie_header)</code></td><td>Set the cookie from a pasted <code>Cookie:</code> header.</td></tr>
+      <tr><td class="tool"><code>import_cookie_from_file(path)</code></td><td>Set the cookie from a HAR, storage-dump <code>.zip</code> or cookie JSON file.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Post and delete (8)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>post_tweet(text, image_path, reply_to, images, alt_texts)</code></td><td>Post a tweet, with up to 4 media files and alt text, optionally as a reply.</td></tr>
+      <tr><td class="tool"><code>post_thread(tweets)</code></td><td>Post a thread; items are text or <code>{text, images, alt_texts}</code>; each tweet replies to the previous.</td></tr>
+      <tr><td class="tool"><code>quote_tweet(text, quote_tweet_id, image_path)</code></td><td>Quote-tweet an existing tweet, optional image.</td></tr>
+      <tr><td class="tool"><code>post_note(text, image_path, reply_to)</code></td><td>Post a long-form note tweet beyond 280 characters.</td></tr>
+      <tr><td class="tool"><code>schedule_tweet(text, at_epoch)</code></td><td>Schedule a tweet for a unix timestamp (seconds).</td></tr>
+      <tr><td class="tool"><code>unschedule_tweet(scheduled_tweet_id)</code></td><td>Cancel a scheduled tweet.</td></tr>
+      <tr><td class="tool"><code>delete_tweet(tweet_id)</code></td><td>Delete one of your tweets. Irreversible.</td></tr>
+      <tr><td class="tool"><code>delete_tweets(tweet_ids)</code></td><td>Delete several tweets. Irreversible.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Engage (6)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>like_tweet(tweet_id)</code></td><td>Like a tweet.</td></tr>
+      <tr><td class="tool"><code>unlike_tweet(tweet_id)</code></td><td>Remove a like.</td></tr>
+      <tr><td class="tool"><code>retweet(tweet_id)</code></td><td>Repost a tweet.</td></tr>
+      <tr><td class="tool"><code>unretweet(tweet_id)</code></td><td>Undo a repost (pass the original tweet id).</td></tr>
+      <tr><td class="tool"><code>bookmark_tweet(tweet_id)</code></td><td>Bookmark a tweet (private).</td></tr>
+      <tr><td class="tool"><code>unbookmark_tweet(tweet_id)</code></td><td>Remove a bookmark.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Read and search (10)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>get_my_tweets(limit)</code></td><td>Your recent tweets, newest first.</td></tr>
+      <tr><td class="tool"><code>get_user_tweets(username, limit)</code></td><td>A user's recent tweets.</td></tr>
+      <tr><td class="tool"><code>search_my_tweets(query, regex, limit)</code></td><td>Your own tweets matching a substring or regex (local filter, useful for cleanup).</td></tr>
+      <tr><td class="tool"><code>get_tweet(tweet_id)</code></td><td>One tweet: text, author, counts, URL.</td></tr>
+      <tr><td class="tool"><code>search_x(query, latest, limit)</code></td><td>Search all of X with X search operators.</td></tr>
+      <tr><td class="tool"><code>get_home_timeline(following, limit)</code></td><td>Your home feed: Following (chronological) or For You.</td></tr>
+      <tr><td class="tool"><code>get_replies(tweet_id, limit)</code></td><td>A tweet's conversation.</td></tr>
+      <tr><td class="tool"><code>get_bookmarks(limit)</code></td><td>Your bookmarks.</td></tr>
+      <tr><td class="tool"><code>get_user_likes(username, limit)</code></td><td>Tweets a user has liked.</td></tr>
+      <tr><td class="tool"><code>get_notifications(limit)</code></td><td>Your notifications (mentions, engagement).</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>People (6)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>get_user_profile(username)</code></td><td>Name, bio, follower/following/tweet counts, verified, created_at.</td></tr>
+      <tr><td class="tool"><code>get_followers(username, limit)</code></td><td>A user's followers.</td></tr>
+      <tr><td class="tool"><code>get_following(username, limit)</code></td><td>Accounts a user follows.</td></tr>
+      <tr><td class="tool"><code>get_likers(tweet_id, limit)</code></td><td>Users who liked a tweet.</td></tr>
+      <tr><td class="tool"><code>get_retweeters(tweet_id, limit)</code></td><td>Users who retweeted a tweet.</td></tr>
+      <tr><td class="tool"><code>get_friendship(username)</code></td><td>Your relationship with a user and its notification settings.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Social graph and profile (8)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>follow_user(username, notify, dry_run)</code></td><td>Follow; <code>notify=True</code> also turns on the bell.</td></tr>
+      <tr><td class="tool"><code>unfollow_user(username)</code></td><td>Unfollow.</td></tr>
+      <tr><td class="tool"><code>block_user(username)</code></td><td>Block.</td></tr>
+      <tr><td class="tool"><code>unblock_user(username)</code></td><td>Unblock.</td></tr>
+      <tr><td class="tool"><code>mute_user(username)</code></td><td>Mute (they are not notified).</td></tr>
+      <tr><td class="tool"><code>unmute_user(username)</code></td><td>Unmute.</td></tr>
+      <tr><td class="tool"><code>pin_tweet(tweet_id)</code></td><td>Pin one of your tweets to your profile.</td></tr>
+      <tr><td class="tool"><code>unpin_tweet(tweet_id)</code></td><td>Unpin it.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Bell and bulk (4)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>set_user_notifications(username, on, kind, dry_run)</code></td><td>Per-account bell on/off; <code>kind</code> is <code>posts</code> or <code>live</code>.</td></tr>
+      <tr><td class="tool"><code>set_user_retweets(username, on, dry_run)</code></td><td>Show or hide a user's reposts in your timeline.</td></tr>
+      <tr><td class="tool"><code>bulk_follow(usernames, notify, max_actions, journal_path, dry_run, capture_suggestions)</code></td><td>Follow many accounts (bell on), resumable via a journal, 30-75 s between accounts, stops on rate limits.</td></tr>
+      <tr><td class="tool"><code>bulk_set_notifications(usernames, on, kind, max_actions, journal_path, dry_run)</code></td><td>Bell on/off for many accounts you follow, resumable.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Account suggestions (3)</h3>
+  <div class="table-wrap"><table class="tools">
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="tool"><code>get_suggestions(source, username, limit, save)</code></td><td>Fetch X's account suggestions and append them to a local SQLite store.</td></tr>
+      <tr><td class="tool"><code>list_saved_suggestions(for_username, source, distinct, limit)</code></td><td>List saved suggestions, newest first.</td></tr>
+      <tr><td class="tool"><code>export_saved_suggestions(path, for_username, source, distinct)</code></td><td>Export them to <code>.csv</code>, <code>.json</code> or <code>.jsonl</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Not supported: DMs, polls, Lists, profile editing, Spaces, hiding replies.</p>
+</section>
+
+<section id="how-it-works">
+  <h2>How it works</h2>
+  <div class="flow">
+    <div class="flow-node">
+      <h4>Your cookie</h4>
+      <div class="where">auth_token + ct0 (+ twid)</div>
+      <ul><li>from a paste, HAR, zip or JSON</li><li>file (mode 600) or Keychain</li></ul>
+    </div>
+    <div class="flow-arrow"><span class="arr arr-h">&rarr;</span><span class="arr arr-v">&darr;</span>headers</div>
+    <div class="flow-node main">
+      <h4>tweetkit-x</h4>
+      <div class="where">TweetKit · tweetkit · tweetkit-mcp</div>
+      <ul><li>public web bearer + <code>x-csrf-token</code></li><li><code>x-client-transaction-id</code></li><li>media upload, GraphQL calls</li></ul>
+    </div>
+    <div class="flow-arrow"><span class="arr arr-h">&rarr;</span><span class="arr arr-v">&darr;</span>HTTPS</div>
+    <div class="flow-node">
+      <h4>X web endpoints</h4>
+      <div class="where">x.com · upload.x.com · api.x.com</div>
+      <ul><li>CreateTweet, DeleteTweet</li><li>UserTweets, SearchTimeline</li></ul>
+    </div>
+  </div>
+  <ol>
+    <li><strong>Transaction id.</strong> X requires an <code>x-client-transaction-id</code> header derived from the page's <code>ondemand.s</code> script. tweetkit fetches the page once and generates it with the <a href="https://pypi.org/project/x-client-transaction-id/"><code>x-client-transaction-id</code></a> package.</li>
+    <li><strong>Media upload.</strong> <code>upload.x.com/i/media/upload.json</code>: <code>INIT</code>, <code>APPEND</code> in 4 MB chunks, <code>FINALIZE</code>, then <code>STATUS</code> polling for video. Alt text goes to <code>media/metadata/create.json</code>. Each file yields a <code>media_id</code>.</li>
+    <li><strong>Write and delete.</strong> <code>POST /i/api/graphql/&lt;queryId&gt;/CreateTweet</code> (with media ids, reply or quote) and <code>DeleteTweet</code>.</li>
+    <li><strong>Read.</strong> <code>UserTweets</code> (cursor pagination), <code>UserByScreenName</code>, <code>SearchTimeline</code>, <code>TweetDetail</code> and other timeline queries.</li>
+  </ol>
+  <p>Auth is the cookie, the public web bearer token (the same non-secret token x.com sends for every visitor) and <code>ct0</code> echoed as <code>x-csrf-token</code>. X changes the GraphQL query ids every few weeks; they live in <code>tweetkit_x/constants.py</code>, with notes on refreshing them from a fresh HAR.</p>
+</section>
+
+<section id="security">
+  <h2>Security</h2>
+  <ul>
+    <li>The cookie is the only secret. It is stored with mode 600 in <code>~/.config/tweetkit/cookie.txt</code> or in the macOS Keychain.</li>
+    <li>tweetkit never prints the cookie value: importers and MCP tools report cookie names and lengths only.</li>
+    <li>The cookie is sent only to X's own hosts (<code>x.com</code>, <code>upload.x.com</code>, <code>api.x.com</code>). There is no telemetry and no third-party server.</li>
+    <li>The repository's <code>.gitignore</code> excludes <code>cookie.txt</code>, <code>.env</code>, <code>*.har</code> and <code>*.zip</code>.</li>
+    <li>The bundled bearer is X's public web bearer, the same for every visitor, not a secret.</li>
+    <li>Anyone with your <code>auth_token</code> can act as you on X. Do not paste it into chats or issues you share; log out of X in the browser to invalidate it.</li>
+  </ul>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <details class="faq"><summary>Does tweetkit-x need an X API key or a developer account?</summary><p>No. It uses your own logged-in x.com session cookie (auth_token and ct0) and makes the same internal calls the x.com web app makes. There is no developer app, no OAuth flow and no API key.</p></details>
+  <details class="faq"><summary>Is tweetkit-x free?</summary><p>Yes. It is MIT-licensed open source and does not call the paid X API, which since February 2026 has no free tier for new developers and is billed per use.</p></details>
+  <details class="faq"><summary>Can it post images, GIFs and videos?</summary><p>Yes. Each tweet can carry up to 4 local media files (PNG, JPEG, WebP, GIF or MP4) with optional alt text, from Python (tk.post with images and alt_texts) and from the MCP tool post_tweet. The CLI post command attaches one file.</p></details>
+  <details class="faq"><summary>Can an AI agent post a thread with images?</summary><p>Yes, since 0.5.0. The MCP tool post_thread takes a list where each item is the tweet text or an object with text, images (up to 4 files) and alt_texts. Each tweet is posted as a reply to the previous one.</p></details>
+  <details class="faq"><summary>What happens if a file in a thread is missing?</summary><p>Nothing is posted. Every tweet of the thread is checked before the first one goes out: empty text, a missing file or more than 4 media returns an error. If X itself rejects a tweet while the thread is being posted, posting stops there and the earlier tweets stay published.</p></details>
+  <details class="faq"><summary>How do I get my X session cookie?</summary><p>Copy the cookie request header from DevTools (F12, Network, any x.com request) and run tweetkit import --paste, or import a HAR file or a storagedump extension zip with tweetkit import --file. Copying document.cookie does not work because auth_token is HttpOnly.</p></details>
+  <details class="faq"><summary>Where is my cookie stored and where is it sent?</summary><p>In ~/.config/tweetkit/cookie.txt with mode 600, or in the macOS Keychain if you choose it. It is sent only to X's own hosts (x.com, upload.x.com, api.x.com) and is never printed.</p></details>
+  <details class="faq"><summary>Can my X account get limited or suspended?</summary><p>Yes, that is possible. Automating your web session is against X's Terms of Service, and X can rate-limit, lock or suspend an account for it. Use it for your own account, at a human pace, at your own risk.</p></details>
+  <details class="faq"><summary>Does it work on Linux and Windows?</summary><p>Yes. It is pure Python 3.10+. The Keychain option is macOS only; on other systems keep the cookie in the file or in the TWEETKIT_COOKIE or TWEETKIT_COOKIE_FILE environment variables.</p></details>
+  <details class="faq"><summary>Why does pip install version 0.3.0?</summary><p>PyPI still has 0.3.0. Version 0.5.0 ships as a GitHub release with a wheel and an sdist; install it with pip install "tweetkit-x[mcp] @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0" or from the release wheel.</p></details>
+  <details class="faq"><summary>Is it an alternative to the official X API?</summary><p>For automating your own account, yes: posting, deleting, reading and searching without a developer account or per-use fees. It is not sanctioned by X, it can break when X changes its web app, and it is not suited to apps that act for other users.</p></details>
+  <details class="faq"><summary>What does it not support?</summary><p>Direct messages, polls, Lists, profile editing, Spaces and hiding replies are not implemented.</p></details>
+</section>
+
+<section id="alternatives">
+  <h2>Alternatives</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Option</th><th>Auth</th><th>Cost</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Official X API</td><td>developer account, OAuth / keys</td><td>pay-per-use since Feb 2026, no free tier for new developers</td><td>Supported by X; the right choice for apps that act for other users.</td></tr>
+      <tr><td>twikit-based MCP servers</td><td>logged-in web session</td><td>free</td><td>Built on the twikit Python library, which also uses X's internal web API; same ToS caveat.</td></tr>
+      <tr><td>OAuth-based X MCP servers (e.g. mbelinky/x-mcp-server)</td><td>X developer app credentials</td><td>X API pricing applies</td><td>Use the official API through MCP.</td></tr>
+      <tr><td><strong>tweetkit-x</strong></td><td>your session cookie</td><td>free</td><td>Python library, CLI and MCP server in one package; images and threads over MCP; no developer account.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Names are used only to identify these projects; there is no affiliation.</p>
+</section>
+
+<section id="agents">
+  <h2>AI agent integration</h2>
+  <ul>
+    <li><a href="https://github.com/nsozturk/tweetkit-x/blob/main/AGENTS.md"><code>AGENTS.md</code></a>: the contract for coding agents that install, call or change tweetkit-x.</li>
+    <li><a href="https://github.com/nsozturk/tweetkit-x/blob/main/GLOBAL_AGENT_RULE.md"><code>GLOBAL_AGENT_RULE.md</code></a>: a rule you can add to your own agent's global instructions so it uses tweetkit-x for X tasks.</li>
+    <li><a href="llms.txt"><code>llms.txt</code></a>: a short plain-text summary of the project for language models (<a href="https://llmstxt.org/">llmstxt.org</a> format).</li>
+  </ul>
+  <p>For agents using the MCP server: call <code>auth_status</code> first, confirm text, files and ids with the user before any write, pass absolute file paths, and try <code>dry_run=True</code> on follow and bulk tools.</p>
+</section>
+
+<section id="changelog">
+  <h2>Changelog</h2>
+  <h3>0.5.0</h3>
+  <ul>
+    <li>MCP <code>post_tweet</code> takes <code>images</code> (up to 4 files) and a parallel <code>alt_texts</code> list; <code>image_path</code> still works.</li>
+    <li>MCP <code>post_thread</code> accepts objects <code>{text, images, alt_texts}</code> besides plain text.</li>
+    <li>Every tweet of a thread is validated before the first is posted.</li>
+    <li>Python: <code>post_thread</code> accepts dict items; new <code>TweetKit.thread_items(items)</code>.</li>
+    <li>New no-network test <code>tests/test_media_tools.py</code>. The MCP server has 48 tools.</li>
+  </ul>
+  <h3>0.4.0</h3>
+  <ul>
+    <li>Per-account bell and repost toggles, follow with notifications, resumable rate-limited bulk follow with a journal, and X account suggestions saved to SQLite.</li>
+  </ul>
+  <h3>0.3.0</h3>
+  <ul>
+    <li>The version currently on PyPI.</li>
+  </ul>
+  <p>All releases: <a href="https://github.com/nsozturk/tweetkit-x/releases">GitHub releases</a>.</p>
+</section>
+
+<section id="disclaimer">
+  <h2>Disclaimer</h2>
+  <div class="callout warn">
+    <p>This project automates your <strong>own</strong> X web session for personal use. Automating the web session is <strong>against X's Terms of Service</strong>, and using it may get your account rate-limited, locked or suspended. You are solely responsible for how you use it. It is provided as is, without warranty. Not affiliated with X Corp.</p>
+  </div>
+</section>
+
+<section id="license">
+  <h2>License</h2>
+  <p>MIT. See <a href="https://github.com/nsozturk/tweetkit-x/blob/main/LICENSE">LICENSE</a>. Source: <a href="https://github.com/nsozturk/tweetkit-x">github.com/nsozturk/tweetkit-x</a>.</p>
+</section>
+
+    <div class="no-results" id="noResults">No section matches your search.</div>
+    <footer>tweetkit-x 0.5.0 · MIT · not affiliated with X Corp. · <a href="https://github.com/nsozturk/tweetkit-x">GitHub</a> · <a href="llms.txt">llms.txt</a></footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  document.querySelectorAll('pre').forEach(function (pre) {
+    var wrap = document.createElement('div');
+    wrap.className = 'code-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.addEventListener('click', function () {
+      var text = pre.innerText.replace(/\n$/, '');
+      var done = function () {
+        btn.textContent = 'Copied';
+        btn.classList.add('done');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1600);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+      } else { fallback(text); done(); }
+    });
+    wrap.appendChild(btn);
+  });
+  function fallback(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  var sidebar = document.getElementById('sidebar');
+  var menuBtn = document.getElementById('menuBtn');
+  menuBtn.addEventListener('click', function () {
+    var open = sidebar.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  sidebar.querySelectorAll('a').forEach(function (a) {
+    a.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      menuBtn.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+  var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  function setActive(id) {
+    links.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + id); });
+  }
+  var ticking = false;
+  function spy() {
+    ticking = false;
+    var current = null;
+    var atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      if (t.offsetParent === null) continue;
+      var top = t.getBoundingClientRect().top;
+      if (top <= 110) current = t.id;
+      if (atBottom && top < innerHeight) current = t.id;
+    }
+    if (current) setActive(current);
+  }
+  window.addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(spy); }
+  }, { passive: true });
+  setActive((location.hash || '#overview').slice(1));
+
+  var input = document.getElementById('docSearch');
+  var status = document.getElementById('searchStatus');
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main.content section'));
+  var noResults = document.getElementById('noResults');
+  function filter() {
+    var q = input.value.trim().toLowerCase();
+    var shown = 0;
+    sections.forEach(function (sec) {
+      var hit = !q || sec.textContent.toLowerCase().indexOf(q) !== -1;
+      sec.classList.toggle('hidden', !hit);
+      if (hit) shown++;
+    });
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      var sec = el && el.closest('section');
+      var hide = sec && sec.classList.contains('hidden');
+      if (!hide && q && a.classList.contains('sub')) {
+        var txt = el.textContent + ' ' + (el.nextElementSibling ? el.nextElementSibling.textContent : '');
+        hide = txt.toLowerCase().indexOf(q) === -1;
+      }
+      a.classList.toggle('hidden', !!hide);
+    });
+    document.querySelectorAll('.nav-group').forEach(function (g) {
+      g.classList.toggle('hidden', !g.querySelector('.nav-item:not(.hidden)'));
+    });
+    noResults.style.display = shown ? 'none' : 'block';
+    status.textContent = q ? shown + (shown === 1 ? ' section matches' : ' sections match') : '';
+  }
+  input.addEventListener('input', filter);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { input.value = ''; filter(); }
+  });
+})();
+</script>
+</body>
+</html>

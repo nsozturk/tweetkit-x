@@ -1,0 +1,36 @@
+# tweetkit-x
+
+> tweetkit-x is a free, open-source Python library, CLI and MCP server that posts, deletes and reads on X (Twitter) with your own logged-in web session, including images and threads, with no paid API.
+
+Version 0.5.0, MIT, Python 3.10+. It replays the internal calls x.com makes in the browser, authenticated with the user's own session cookie (`auth_token` + `ct0`). No X API key, no developer app, no OAuth. Unofficial: automating the web session is against X's Terms of Service and carries account risk.
+
+## What it does
+
+- Post text, up to 4 images / GIF / video per tweet with alt text, replies, threads, quote-tweets, long-form notes and scheduled tweets.
+- Through MCP, `post_tweet` and `post_thread` attach images in single tweets and in every tweet of a thread; the thread is checked before the first tweet is posted.
+- Delete one or many tweets; like, retweet, bookmark, follow, block, mute, pin, per-account notifications, resumable bulk follow.
+- Read home feed, timelines, replies, bookmarks, likes, notifications, profiles, followers, likers; search all of X.
+- MCP server with 48 tools for Claude Desktop, Claude Code, Cursor and other MCP clients.
+
+## Install
+
+- `pip install "tweetkit-x[mcp] @ git+https://github.com/nsozturk/tweetkit-x@v0.5.0"` (PyPI still serves 0.3.0)
+- MCP server command: `tweetkit-mcp`; CLI: `tweetkit`
+
+## Use
+
+- MCP: call `auth_status`, then `set_session_cookie(cookie_header)` once, then e.g. `post_thread(tweets=[{"text": "1/ ...", "images": ["/abs/path/a.png"], "alt_texts": ["..."]}, "2/ ..."])`
+- CLI: `tweetkit import --paste`, `tweetkit post "hello"`, `tweetkit delete <id>`
+- Python: `from tweetkit_x import TweetKit; TweetKit().post("hello", images=["a.png"])`
+
+## Docs
+
+- [README](https://github.com/nsozturk/tweetkit-x/blob/main/README.md): features, cookie setup, Python, CLI, all 48 MCP tools, FAQ
+- [AGENTS.md](https://github.com/nsozturk/tweetkit-x/blob/main/AGENTS.md): contract for coding agents: auth order, tools, CLI, return shapes, rate limits
+- [GLOBAL_AGENT_RULE.md](https://github.com/nsozturk/tweetkit-x/blob/main/GLOBAL_AGENT_RULE.md): copy-paste rule for your own agent
+- [Docs site](https://nsozturk.github.io/tweetkit-x/)
+
+## Optional
+
+- [Releases](https://github.com/nsozturk/tweetkit-x/releases): wheel and sdist for each version
+- [Source](https://github.com/nsozturk/tweetkit-x)

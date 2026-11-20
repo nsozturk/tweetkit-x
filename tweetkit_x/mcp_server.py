@@ -131,6 +131,7 @@ def import_cookie_from_file(path: str) -> dict:
 
     Returns which cookies were found (names + lengths, never values).
     """
+    path = os.path.expanduser(path)  # "~/Downloads/x.com.har" works too
     if not os.path.isfile(path):
         return {"ok": False, "error": f"file not found: {path}"}
     try:
@@ -151,24 +152,42 @@ def import_cookie_from_file(path: str) -> dict:
 
 # --------------------------------------------------------------------- write
 @mcp.tool()
-def post_tweet(text: str, image_path: str = "", reply_to: str = "") -> dict:
-    """Post a tweet. Optionally attach one image (local path) and/or reply to a tweet id.
+def post_tweet(text: str, image_path: str = "", reply_to: str = "",
+               images: list[str] | None = None, alt_texts: list[str] | None = None) -> dict:
+    """Post a tweet, optionally with media and/or as a reply to a tweet id.
 
+    Media: `images` = up to 4 local file paths (PNG, JPEG, WebP, GIF or MP4), with an
+    optional parallel `alt_texts` list. `image_path` (one file) still works.
     Returns {ok, id, url}. This publishes to the user's real, public account —
-    confirm the wording with the user first.
+    confirm the wording and the files with the user first.
     """
+    try:
+        (_, paths, alts), = TweetKit.thread_items(
+            [{"text": text, "images": images or ([image_path] if image_path else []),
+              "alt_texts": alt_texts or []}])
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc).replace("tweet 1: ", "")}
     tk, err = _get_tk()
     if err:
         return {"ok": False, "error": err}
-    return tk.post(text, image_path=image_path or None, reply_to=reply_to or None)
+    return tk.post(text, images=paths or None, alt_texts=alts or None, reply_to=reply_to or None)
 
 
 @mcp.tool()
-def post_thread(tweets: list[str]) -> list[dict]:
-    """Post a thread: a list of tweet texts, each auto-replying to the previous one.
+def post_thread(tweets: list[str | dict]) -> list[dict]:
+    """Post a thread; each tweet auto-replies to the previous one.
 
-    Returns one {ok,id,url} per tweet. Stops early if a tweet fails.
+    Each item is either the tweet text, or an object
+    {"text": "...", "images": ["/path/a.png", ...], "alt_texts": ["...", ...]}
+    with up to 4 local media files per tweet. Every item (text and files) is checked
+    before the first tweet is posted, so a bad path never leaves half a thread.
+    Returns one {ok,id,url} per tweet. Stops early if a tweet fails. This publishes
+    to the user's real, public account — confirm the wording and files first.
     """
+    try:
+        TweetKit.thread_items(list(tweets))
+    except ValueError as exc:
+        return [{"ok": False, "error": str(exc)}]
     tk, err = _get_tk()
     if err:
         return [{"ok": False, "error": err}]
