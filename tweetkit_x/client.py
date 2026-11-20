@@ -14,7 +14,9 @@ bearer + the ct0 CSRF value echoed as `x-csrf-token`.
 """
 import json
 import os
+import random
 import re
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -385,24 +387,301 @@ class TweetKit:
                               {"scheduled_tweet_id": str(scheduled_tweet_id)})
 
     # --------------------------------------------------- social graph (v1.1)
-    def _v11(self, endpoint, data=None, method="POST"):
-        """Call a legacy v1.1 REST endpoint (still live for social-graph actions)."""
+    def _v11(self, endpoint, data=None, method="POST", params=None, raw=False, dry_run=False):
+        """Call a legacy v1.1 REST endpoint (still live for social-graph actions).
+
+        Returns {ok} ({ok, body} with raw=True). Failures carry `stop` when X signals
+        a rate limit / follow limit / lock (see C.STOP_ERROR_CODES) — callers doing
+        bulk work must halt on it. dry_run=True sends nothing and returns the exact
+        request (method, url, params, form body, header names — never values).
+        """
         url = f"{C.V11_BASE}/{endpoint}.json"
         path = f"/1.1/{endpoint}.json"
-        r = self._session.request(method, url, data=data,
-            headers=self._headers(method, path,
-                {"content-type": "application/x-www-form-urlencoded"}), timeout=self.timeout)
+        extra = {"content-type": "application/x-www-form-urlencoded"} if method == "POST" else None
+        if dry_run:
+            return {"ok": True, "dry_run": True, "method": method, "url": url,
+                    "params": params, "data": data,
+                    "header_names": sorted(self._headers(method, path, extra))}
+        r = self._session.request(method, url, data=data, params=params,
+                                  headers=self._headers(method, path, extra), timeout=self.timeout)
         try:
             body = r.json()
         except Exception:
             body = {"raw": r.text[:200]}
         if r.status_code != 200 or (isinstance(body, dict) and body.get("errors")):
-            return {"ok": False, "status": r.status_code, "error": body}
-        return {"ok": True}
+            out = {"ok": False, "status": r.status_code, "error": body,
+                   "rate_limit_remaining": r.headers.get("x-rate-limit-remaining"),
+                   "rate_limit_reset": r.headers.get("x-rate-limit-reset")}
+            stop = stop_reason(r.status_code, body)
+            if stop:
+                out["stop"] = stop
+            return out
+        return {"ok": True, "body": body} if raw else {"ok": True}
 
-    def follow(self, username):
-        """Follow @username."""
-        return self._v11("friendships/create", {"user_id": self.user_id_by_name(username)})
+    def follow(self, username, notify=False, dry_run=False):
+        """Follow @username. notify=True then turns on post notifications (the bell),
+        exactly like the web: friendships/create, short pause, friendships/update device=true.
+        A protected account only gets a follow request, so the bell is skipped."""
+        uid = self.user_id_by_name(username)
+        r = self._v11("friendships/create", {"user_id": uid}, raw=True, dry_run=dry_run)
+        body = r.pop("body", None) or {}
+        if body.get("protected") or body.get("follow_request_sent"):
+            r["requested"] = True  # protected account: only a follow request was sent
+        if not notify or not r.get("ok"):
+            return r
+        if r.get("requested"):
+            return {**r, "notify": {"ok": False, "skipped": "follow request pending"}}
+        if not dry_run:
+            time.sleep(random.uniform(*self.FOLLOW_TO_BELL_DELAY))
+        n = self._update_friendship(uid, {"device": "true"}, dry_run=dry_run)
+        return {"ok": bool(n.get("ok")), "follow": r, "notify": n, **({"stop": n["stop"]} if n.get("stop") else {})}
+
+    # ------------------------------------------- per-account notifications
+    # Pause between the follow and the bell for the same account (seconds).
+    FOLLOW_TO_BELL_DELAY = (2.0, 6.0)
+
+    def _update_friendship(self, user_id, flags, dry_run=False):
+        """POST friendships/update {id, <one flag>} — the web sends one flag per call."""
+        return self._v11("friendships/update",
+                         {**C.USER_INCLUDE_PARAMS, "cursor": "-1", "id": str(user_id), **flags},
+                         dry_run=dry_run)
+
+    def friendship(self, username):
+        """Your relationship + per-account notification state for @username (friendships/show).
+
+        Returns {ok, user_id, username, following, followed_by, follow_requested,
+        notifications (bell / all posts), live_notifications (live video),
+        want_retweets (show their reposts), muting, blocking, blocked_by}."""
+        me = user_id_of(self.cookie)
+        params = {"target_screen_name": username.lstrip("@")}
+        if me:
+            params["source_id"] = me
+        r = self._v11("friendships/show", method="GET", params=params, raw=True)
+        if not r.get("ok"):
+            return r
+        rel = r["body"].get("relationship", {})
+        s, t = rel.get("source", {}), rel.get("target", {})
+        return {"ok": True, "user_id": t.get("id_str"), "username": t.get("screen_name"),
+                "following": s.get("following"), "followed_by": s.get("followed_by"),
+                "follow_requested": s.get("following_requested"),
+                "notifications": s.get("notifications_enabled"),
+                "live_notifications": s.get("live_following"),
+                "want_retweets": s.get("want_retweets"), "muting": s.get("muting"),
+                "blocking": s.get("blocking"), "blocked_by": s.get("blocked_by")}
+
+    def set_notifications(self, username, on=True, kind="posts", dry_run=False, user_id=None):
+        """Turn the per-account bell on/off for an account you follow.
+
+        kind='posts' → notify on all their posts (web bell; `device`).
+        kind='live'  → notify when they go live (`live`).
+        X stores these as two independent booleans; "off" = posts off (+ live off if wanted).
+        """
+        flag = {"posts": "device", "live": "live"}[kind]
+        uid = user_id or self.user_id_by_name(username)
+        return self._update_friendship(uid, {flag: "true" if on else "false"}, dry_run=dry_run)
+
+    def set_retweets(self, username, on=True, dry_run=False, user_id=None):
+        """Show (on) or hide (off) @username's reposts in your timeline."""
+        uid = user_id or self.user_id_by_name(username)
+        return self._update_friendship(uid, {"retweets": "true" if on else "false"}, dry_run=dry_run)
+
+    # ------------------------------------------------- account suggestions
+    SUGGESTION_SOURCES = ("follow", "sidebar", "connect")
+
+    def suggestions(self, source="follow", username=None, limit=20, save=True, db_path=None):
+        """Fetch account suggestions and (by default) append them to the local SQLite store.
+
+        source='follow'  — what x.com shows right after you follow @username
+                           (v1.1 users/recommendations, display_location=profile-cluster-follow).
+        source='sidebar' — the "You might like" box on @username's profile
+                           (GraphQL SidebarUserRecommendations).
+        source='connect' — the general "Who to follow" / Connect tab (GraphQL
+                           ConnectTabTimeline); with username → "similar to @username".
+        Returns {ok, source, for_username, count, users[], fetch_ids, db}.
+        """
+        if source not in self.SUGGESTION_SOURCES:
+            raise ValueError(f"source must be one of {self.SUGGESTION_SOURCES}")
+        if source in ("follow", "sidebar") and not username:
+            raise ValueError(f"source={source!r} needs a username")
+        uname = username.lstrip("@") if username else None
+        uid = self.user_id_by_name(uname) if uname else None
+        pages = []  # (method, url, params, status, text, users)
+
+        if source == "follow":
+            ep = "users/recommendations"
+            params = {**C.USER_INCLUDE_PARAMS, "display_location": "profile-cluster-follow",
+                      "user_id": uid, "limit": int(limit), "excluded": "", "pc": "true"}
+            r = self._session.get(f"{C.V11_BASE}/{ep}.json", params=params,
+                                  headers=self._headers("GET", f"/1.1/{ep}.json"), timeout=self.timeout)
+            users = []
+            if r.status_code == 200:
+                for rec in r.json() or []:
+                    u = _user_from_v11(rec.get("user") or {})
+                    if u:
+                        users.append({**u, "token": rec.get("token")})
+            pages.append(("GET", f"{C.V11_BASE}/{ep}.json", params, r, users))
+        elif source == "sidebar":
+            op = "SidebarUserRecommendations"
+            qid = C.QUERY_IDS[op]
+            params = {"variables": json.dumps({"profileUserId": uid}),
+                      "features": json.dumps(C.SIDEBAR_RECS_FEATURES),
+                      "fieldToggles": json.dumps({"withPayments": False, "withDmBlocks": False,
+                                                  "withAuxiliaryUserLabels": False})}
+            r = self._session.get(f"{C.GQL_BASE}/{qid}/{op}", params=params,
+                                  headers=self._headers("GET", f"/i/api/graphql/{qid}/{op}"),
+                                  timeout=self.timeout)
+            users = []
+            if r.status_code == 200:
+                for rec in (r.json().get("data") or {}).get("sidebar_user_recommendations") or []:
+                    found = {}
+                    _walk_users(rec.get("user_results"), found)
+                    users += [{**u, "token": rec.get("token")} for u in found.values()]
+            pages.append(("GET", f"{C.GQL_BASE}/{qid}/{op}", params, r, users))
+        else:
+            op = "ConnectTabTimeline"
+            qid = C.QUERY_IDS[op]
+            ctx = json.dumps({"contextualUserId": uid} if uid else {})
+            feats = {**C.USER_TWEETS_FEATURES, **C.CONNECT_TAB_EXTRA_FEATURES}
+            cursor, seen = None, set()
+            while len(seen) < limit and len(pages) < 10:
+                v = {"count": 20, "context": ctx}
+                if cursor:
+                    v["cursor"] = cursor
+                params = {"variables": json.dumps(v), "features": json.dumps(feats)}
+                r = self._session.get(f"{C.GQL_BASE}/{qid}/{op}", params=params,
+                                      headers=self._headers("GET", f"/i/api/graphql/{qid}/{op}"),
+                                      timeout=self.timeout)
+                found = {}
+                cursor = _walk_users(r.json(), found) if r.status_code == 200 else None
+                new = [u for k, u in found.items() if k not in seen]
+                seen.update(found)
+                pages.append(("GET", f"{C.GQL_BASE}/{qid}/{op}", params, r, new))
+                if r.status_code != 200 or not new or not cursor:
+                    break
+
+        bad = [p for p in pages if p[3].status_code != 200]
+        users = [u for p in pages for u in p[4]][:limit]
+        out = {"ok": not bad, "source": source, "for_username": uname, "for_user_id": uid,
+               "count": len(users), "users": users}
+        if bad:
+            out.update(status=bad[0][3].status_code, error=bad[0][3].text[:200])
+            stop = stop_reason(bad[0][3].status_code, _json_or_none(bad[0][3]))
+            if stop:
+                out["stop"] = stop
+        if save:
+            from . import store
+            db = store.connect(db_path)
+            out["fetch_ids"] = [store.save_fetch(db, source=source, method=m, url=u, params=p,
+                                                 status=r.status_code, body=r.text, users=us,
+                                                 for_user_id=uid, for_username=uname)
+                                for m, u, p, r, us in pages]
+            out["db"] = db_path or os.environ.get("TWEETKIT_DB") or store.DEFAULT_DB
+            db.close()
+        return out
+
+    # ------------------------------------------------------- bulk (resumable)
+    # Defaults are conservative knobs, not X-published limits — tune per run.
+    BULK_WRITE_DELAY = (30.0, 75.0)   # jitter between accounts that needed a write
+    BULK_READ_DELAY = (1.5, 4.0)      # pause between accounts that needed no write
+
+    def bulk_follow(self, usernames, notify=True, journal_path=None, dry_run=False,
+                    max_actions=None, capture_suggestions=True, suggestions_limit=10,
+                    write_delay=None, read_delay=None, log=print):
+        """Follow (and optionally bell-on) many accounts, resumably.
+
+        Per account: friendships/show first → skip what is already in the wanted
+        state → follow → pause → bell on → capture post-follow suggestions.
+        Each finished account is appended to a JSONL journal at once; re-running
+        with the same journal skips accounts already `done`/`skipped`/`requested`.
+        Stops cleanly (journal `stopped`, returns) on HTTP 429 / rate-limit / follow-
+        limit / lock signals. dry_run=True sends no writes and journals to
+        `<journal>.dryrun.jsonl` so the real run is never pre-skipped.
+        """
+        def act(name, state):
+            if not state["following"] and not state["follow_requested"]:
+                return self.follow(name, notify=notify, dry_run=dry_run)
+            if notify and state["following"] and not state["notifications"]:
+                return self.set_notifications(name, True, dry_run=dry_run, user_id=state["user_id"])
+            return None
+        res = self._bulk(usernames, act, journal_path or default_journal("follow"), dry_run,
+                         max_actions, write_delay, read_delay, log,
+                         after=(lambda n: self.suggestions("follow", n, limit=suggestions_limit))
+                         if capture_suggestions and not dry_run else None)
+        return res
+
+    def bulk_notifications(self, usernames, on=True, kind="posts", journal_path=None,
+                           dry_run=False, max_actions=None, write_delay=None, read_delay=None,
+                           log=print):
+        """Turn the bell on/off for many followed accounts, resumably (see bulk_follow)."""
+        key = {"posts": "notifications", "live": "live_notifications"}[kind]
+
+        def act(name, state):
+            if not state["following"]:
+                return {"ok": False, "skip": "not following"}
+            if bool(state[key]) == bool(on):
+                return None
+            return self.set_notifications(name, on, kind=kind, dry_run=dry_run, user_id=state["user_id"])
+        return self._bulk(usernames, act, journal_path or default_journal(f"bell-{kind}-{'on' if on else 'off'}"),
+                          dry_run, max_actions, write_delay, read_delay, log)
+
+    def _bulk(self, usernames, act, journal_path, dry_run, max_actions, write_delay,
+              read_delay, log, after=None):
+        if dry_run:
+            journal_path = journal_path + ".dryrun.jsonl"
+        done = journal_done(journal_path)
+        todo, seen = [], set(done)
+        for u in usernames:
+            n = u.strip().lstrip("@")
+            if n and n.lower() not in seen:
+                seen.add(n.lower())
+                todo.append(n)
+        log(f"[bulk] journal={journal_path} | resuming: {len(done)} done, {len(todo)} left"
+            f"{' | DRY RUN' if dry_run else ''}")
+        counts, writes, t0 = {}, 0, time.time()
+        for i, name in enumerate(todo, 1):
+            if max_actions is not None and writes >= max_actions:
+                log(f"[bulk] max_actions={max_actions} reached — re-run to continue")
+                break
+            state = self.friendship(name)
+            if not state.get("ok"):
+                rec = {"unit": name, "status": "stopped" if state.get("stop") else "failed",
+                       "error": str(state.get("error"))[:300], "stop": state.get("stop")}
+            else:
+                r = act(name, state)
+                if r is None:
+                    rec = {"unit": name, "status": "skipped", "reason": "already in wanted state"}
+                elif r.get("skip"):  # not a final state — retried on the next run
+                    rec = {"unit": name, "status": "not_applicable", "reason": r["skip"]}
+                else:
+                    writes += 1
+                    status = ("dry_run" if dry_run else "requested" if r.get("requested")
+                              else "done" if r.get("ok") else "stopped" if r.get("stop") else "failed")
+                    rec = {"unit": name, "status": status, "result": r}
+                    if r.get("stop"):
+                        rec["stop"] = r["stop"]
+                    if after and r.get("ok"):
+                        try:
+                            s = after(name)
+                            rec["suggestions"] = {"count": s.get("count"), "fetch_ids": s.get("fetch_ids")}
+                        except Exception as e:  # capture must never break the follow loop
+                            rec["suggestions"] = {"error": str(e)[:200]}
+            journal_append(journal_path, rec)
+            counts[rec["status"]] = counts.get(rec["status"], 0) + 1
+            el = time.time() - t0
+            log(f"[{time.strftime('%H:%M:%S')}] {i}/{len(todo)} ({100*i/len(todo):.1f}%) | "
+                f"writes {writes} | elapsed {el:.0f}s | {rec['status']}: @{name}"
+                + (f" | STOP: {rec['stop']}" if rec.get("stop") else ""))
+            if rec["status"] == "stopped":
+                log("[bulk] X signalled a limit/lock — stopping. Wait before re-running.")
+                break
+            if i < len(todo) and not dry_run:
+                wrote = rec["status"] in ("done", "requested", "failed")
+                time.sleep(random.uniform(*((write_delay or self.BULK_WRITE_DELAY) if wrote
+                                            else (read_delay or self.BULK_READ_DELAY))))
+        left = len(todo) - sum(counts.values())
+        log(f"[bulk] finished: {counts} | {left} left | journal={journal_path}")
+        return {"journal": journal_path, "counts": counts, "left": left, "writes": writes,
+                "dry_run": dry_run}
 
     def unfollow(self, username):
         """Unfollow @username."""
@@ -757,6 +1036,69 @@ def _create_result(r):
     return {"ok": False, "status": r.status_code, "error": r.text[:300]}
 
 
+def stop_reason(status, body):
+    """Return a reason string when X says 'stop writing now' (429 / rate / follow limit / lock)."""
+    if status == 429:
+        return "HTTP 429 rate limited"
+    errs = body.get("errors") if isinstance(body, dict) else None
+    for e in errs or []:
+        code = e.get("code") if isinstance(e, dict) else None
+        if code in C.STOP_ERROR_CODES:
+            return f"code {code}: {C.STOP_ERROR_CODES[code]}"
+    return None
+
+
+def _json_or_none(r):
+    try:
+        return r.json()
+    except Exception:
+        return None
+
+
+def _user_from_v11(u):
+    """Normalize a legacy v1.1 user object to the same dict shape `_walk_users` emits."""
+    sn = u.get("screen_name")
+    if not sn:
+        return None
+    return {"id": u.get("id_str") or str(u.get("id")), "username": sn, "name": u.get("name"),
+            "bio": u.get("description"), "followers": u.get("followers_count"),
+            "following": u.get("friends_count"),
+            "verified": u.get("ext_is_blue_verified", u.get("verified")),
+            "url": f"https://x.com/{sn}"}
+
+
+# ---- bulk journal: one JSON line per finished account, flushed immediately
+def default_journal(action):
+    d = os.path.join(os.path.expanduser("~/.config/tweetkit"), "journals")
+    return os.path.join(d, f"{action}.jsonl")
+
+
+FINAL_STATUSES = {"done", "skipped", "requested", "dry_run"}
+
+
+def journal_done(path):
+    """Lowercased usernames whose latest journal record is final (re-runs skip them)."""
+    latest = {}
+    if os.path.isfile(path):
+        with open(path) as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except ValueError:  # torn last line after a crash
+                    continue
+                latest[rec["unit"].lower()] = rec["status"]
+    return {u for u, s in latest.items() if s in FINAL_STATUSES}
+
+
+def journal_append(path, rec):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps({**rec, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                           ensure_ascii=False, default=str) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def _walk_users(node, out, _cursor=None):
     """Collect User results into `out` (rest_id → user dict); return the bottom cursor."""
     found = _cursor
@@ -764,14 +1106,16 @@ def _walk_users(node, out, _cursor=None):
         if node.get("__typename") == "User" and node.get("rest_id"):
             lg = node.get("legacy", {}) or {}
             core = node.get("core", {}) or {}
+            counts = node.get("relationship_counts", {}) or {}
             sn = core.get("screen_name") or lg.get("screen_name")
             if sn:
                 out[node["rest_id"]] = {
                     "id": node["rest_id"], "username": sn,
                     "name": core.get("name") or lg.get("name"),
-                    "bio": lg.get("description"),
-                    "followers": lg.get("followers_count"),
-                    "following": lg.get("friends_count"),
+                    # newer payloads drop `legacy` for profile_bio / relationship_counts
+                    "bio": lg.get("description") or (node.get("profile_bio") or {}).get("description"),
+                    "followers": lg.get("followers_count", counts.get("followers")),
+                    "following": lg.get("friends_count", counts.get("following")),
                     "verified": node.get("is_blue_verified"),
                     "url": f"https://x.com/{sn}"}
         if node.get("cursorType") == "Bottom" and node.get("value"):

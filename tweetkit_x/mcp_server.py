@@ -9,6 +9,7 @@ Run:  tweetkit-mcp        (installed console script)
   or: python -m tweetkit_x.mcp_server
 """
 import os
+import sys
 
 from mcp.server.fastmcp import FastMCP
 
@@ -329,10 +330,12 @@ def unschedule_tweet(scheduled_tweet_id: str) -> dict:
 
 # ---------------------------------------------------- social graph actions
 @mcp.tool()
-def follow_user(username: str) -> dict:
-    """Follow @username. (Reversible with unfollow_user.)"""
+def follow_user(username: str, notify: bool = False, dry_run: bool = False) -> dict:
+    """Follow @username. notify=True also turns on the bell (notify on all their posts),
+    the same two calls x.com makes. dry_run=True sends nothing and returns the exact
+    requests. Acts on the user's real account — confirm first. (Undo: unfollow_user.)"""
     tk, err = _get_tk()
-    return {"ok": False, "error": err} if err else tk.follow(username)
+    return {"ok": False, "error": err} if err else tk.follow(username, notify=notify, dry_run=dry_run)
 
 
 @mcp.tool()
@@ -458,6 +461,124 @@ def get_retweeters(tweet_id: str, limit: int = 100) -> list[dict]:
     """Users who retweeted a tweet."""
     tk, err = _get_tk()
     return [{"error": err}] if err else _fmt_users(tk.retweeters(tweet_id, limit=limit))
+
+
+# ------------------------------------- per-account notifications ("bell")
+@mcp.tool()
+def get_friendship(username: str) -> dict:
+    """Your relationship with @username and its per-account notification settings:
+    following, followed_by, follow_requested, notifications (bell = all posts),
+    live_notifications (live video), want_retweets (their reposts shown), muting, blocking."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.friendship(username)
+
+
+@mcp.tool()
+def set_user_notifications(username: str, on: bool = True, kind: str = "posts",
+                           dry_run: bool = False) -> dict:
+    """Turn the per-account bell on/off for an account you follow.
+
+    kind="posts" → notifications for all their posts (the profile bell).
+    kind="live"  → notifications when they go live.
+    X keeps these as two independent switches; "off" = posts off (and live off if wanted).
+    dry_run=True returns the exact request without sending it. Confirm with the user first.
+    """
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.set_notifications(username, on, kind=kind, dry_run=dry_run)
+
+
+@mcp.tool()
+def set_user_retweets(username: str, on: bool = True, dry_run: bool = False) -> dict:
+    """Show (on) or hide (off) @username's reposts in your timeline."""
+    tk, err = _get_tk()
+    return {"ok": False, "error": err} if err else tk.set_retweets(username, on, dry_run=dry_run)
+
+
+def _stderr_log(msg):
+    print(msg, file=sys.stderr, flush=True)  # stdout is the MCP stdio channel
+
+
+@mcp.tool()
+def bulk_follow(usernames: list[str], notify: bool = True, max_actions: int = 5,
+                journal_path: str = "", dry_run: bool = False,
+                capture_suggestions: bool = True) -> dict:
+    """Follow many accounts (and turn their bell on), resumably and rate-limited.
+
+    Per account: read friendships/show → skip if already followed (+bell on) →
+    follow → 2–6 s → bell on → save X's post-follow suggestions to the local DB.
+    30–75 s jitter between accounts. Writes at most `max_actions` accounts per call:
+    CALL AGAIN with the same journal_path to continue — finished accounts are skipped.
+    Stops at once on 429 / rate-limit / follow-limit / lock (counts.stopped > 0):
+    then wait hours before calling again. For long lists prefer the CLI
+    (`tweetkit bulk-follow`). Only run on a list the user explicitly approved;
+    try dry_run=True first (journals to <journal>.dryrun.jsonl, sends nothing).
+    """
+    tk, err = _get_tk()
+    if err:
+        return {"ok": False, "error": err}
+    return tk.bulk_follow(list(usernames), notify=notify, journal_path=journal_path or None,
+                          dry_run=dry_run, max_actions=max_actions,
+                          capture_suggestions=capture_suggestions, log=_stderr_log)
+
+
+@mcp.tool()
+def bulk_set_notifications(usernames: list[str], on: bool = True, kind: str = "posts",
+                           max_actions: int = 10, journal_path: str = "",
+                           dry_run: bool = False) -> dict:
+    """Turn the bell on/off for many accounts you already follow — resumable like bulk_follow
+    (skips accounts already in the wanted state; call again with the same journal_path)."""
+    tk, err = _get_tk()
+    if err:
+        return {"ok": False, "error": err}
+    return tk.bulk_notifications(list(usernames), on=on, kind=kind,
+                                 journal_path=journal_path or None, dry_run=dry_run,
+                                 max_actions=max_actions, log=_stderr_log)
+
+
+# ------------------------------------------------------- account suggestions
+@mcp.tool()
+def get_suggestions(source: str = "follow", username: str = "", limit: int = 20,
+                    save: bool = True) -> dict:
+    """Fetch X's account suggestions and append them (raw + parsed) to the local SQLite store.
+
+    source="follow"  — what x.com recommends right after following @username (needs username).
+    source="sidebar" — the "You might like" box on @username's profile (needs username).
+    source="connect" — the general "Who to follow" / Connect tab; with username →
+                       accounts similar to @username.
+    Read-only on X. Returns {ok, count, users[{id, username, name, bio, followers, ...}], db}.
+    """
+    tk, err = _get_tk()
+    if err:
+        return {"ok": False, "error": err}
+    return tk.suggestions(source, username or None, limit=limit, save=save)
+
+
+@mcp.tool()
+def list_saved_suggestions(for_username: str = "", source: str = "", distinct: bool = True,
+                           limit: int = 200) -> list[dict]:
+    """List suggestions saved in the local store (newest first). distinct=True keeps the
+    latest row per suggested account; for_username filters by the account they were suggested for."""
+    from . import store
+    db = store.connect()
+    try:
+        return store.list_suggestions(db, for_username=for_username or None, source=source or None,
+                                      distinct=distinct, limit=limit)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def export_saved_suggestions(path: str, for_username: str = "", source: str = "",
+                             distinct: bool = True) -> dict:
+    """Export saved suggestions to a .csv / .json / .jsonl file (format from the extension)."""
+    from . import store
+    db = store.connect()
+    try:
+        n = store.export(db, os.path.expanduser(path), for_username=for_username or None,
+                         source=source or None, distinct=distinct)
+    finally:
+        db.close()
+    return {"ok": True, "rows": n, "path": os.path.expanduser(path)}
 
 
 def main():

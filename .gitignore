@@ -19,3 +19,6 @@ dist/
 
 # os
 .DS_Store
+
+# agent checkpoints (local only)
+checkpoints/

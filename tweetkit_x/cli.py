@@ -11,6 +11,12 @@
     tweetkit delete 1800000000000000000 [more_ids...]
     tweetkit tweets [@user] --limit 100      # list tweets (default: you)
     tweetkit search monero [@user] --regex   # filter your tweets
+    tweetkit follow @user --notify [--dry-run]           # follow + bell on
+    tweetkit friendship @user                            # follow + bell state
+    tweetkit notify @user on|off [--live] [--dry-run]    # per-account bell
+    tweetkit bulk-follow handles.csv --dry-run           # resumable, rate-limited
+    tweetkit suggest @user --source follow|sidebar|connect
+    tweetkit suggestions --export out.csv                # saved suggestions
 
 Cookie source for all commands: --keychain <slug> / --cookie-file <path>, else
 the env / default-file resolution described in `tweetkit.cookie`.
@@ -226,6 +232,112 @@ def _tweet_action(a, method):
     return 0 if r.get("ok") else 1
 
 
+def _cmd_follow(a):
+    r = TweetKit(**_kw(a)).follow(a.user, notify=a.notify, dry_run=a.dry_run)
+    print(json.dumps({**r, "user": a.user}, ensure_ascii=False, indent=1 if a.dry_run else None))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_friendship(a):
+    r = TweetKit(**_kw(a)).friendship(a.user)
+    print(json.dumps(r, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_notify(a):
+    r = TweetKit(**_kw(a)).set_notifications(a.user, a.state == "on",
+                                             kind="live" if a.live else "posts", dry_run=a.dry_run)
+    print(json.dumps({**r, "user": a.user}, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _cmd_retweets(a):
+    r = TweetKit(**_kw(a)).set_retweets(a.user, a.state == "on", dry_run=a.dry_run)
+    print(json.dumps({**r, "user": a.user}, ensure_ascii=False))
+    return 0 if r.get("ok") else 1
+
+
+def _read_handles(path, column=None):
+    """Handles from a .csv (column, default x_handle) or a one-per-line text file / '-'."""
+    import csv
+    f = sys.stdin if path == "-" else open(path, newline="")
+    with f:
+        if path.endswith(".csv"):
+            vals = [row.get(column or "x_handle") or "" for row in csv.DictReader(f)]
+        else:
+            vals = [ln.split("#", 1)[0] for ln in f]
+    out = []
+    for v in vals:
+        v = v.strip().rstrip("/").split("/")[-1].lstrip("@")  # accepts x.com/<handle> urls
+        if v:
+            out.append(v)
+    return out
+
+
+def _bulk_logger(path):
+    import os
+    log_f = None
+    if path:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        log_f = open(path, "a")
+
+    def log(msg):
+        print(msg, flush=True)
+        if log_f:
+            log_f.write(msg + "\n")
+            log_f.flush()
+    return log
+
+
+def _delays(a):
+    return {"write_delay": (a.min_delay, a.max_delay) if a.min_delay is not None else None}
+
+
+def _cmd_bulk_follow(a):
+    handles = _read_handles(a.file, a.column)
+    r = TweetKit(**_kw(a)).bulk_follow(
+        handles, notify=not a.no_notify, journal_path=a.journal, dry_run=a.dry_run,
+        max_actions=a.max, capture_suggestions=not a.no_suggestions, log=_bulk_logger(a.log), **_delays(a))
+    print(json.dumps(r))
+    return 3 if r["counts"].get("stopped") else 0
+
+
+def _cmd_bulk_notify(a):
+    handles = _read_handles(a.file, a.column)
+    r = TweetKit(**_kw(a)).bulk_notifications(
+        handles, on=a.state == "on", kind="live" if a.live else "posts", journal_path=a.journal,
+        dry_run=a.dry_run, max_actions=a.max, log=_bulk_logger(a.log), **_delays(a))
+    print(json.dumps(r))
+    return 3 if r["counts"].get("stopped") else 0
+
+
+def _cmd_suggest(a):
+    r = TweetKit(**_kw(a)).suggestions(a.source, a.user, limit=a.limit, save=not a.no_save)
+    for u in r["users"]:
+        print(f"@{u['username']}  {u.get('name') or ''}  ({u.get('followers', '?')} followers)  {u['url']}")
+    print(f"# {r['count']} suggestions (source={a.source}"
+          + (f", for @{r['for_username']}" if r.get("for_username") else "")
+          + (f") saved → {r['db']} fetch_ids={r['fetch_ids']}" if r.get("db") else ")")
+          + ("" if r["ok"] else f" ERROR {r.get('status')}: {r.get('error')}"), file=sys.stderr)
+    return 0 if r["ok"] else 1
+
+
+def _cmd_suggestions(a):
+    from . import store
+    db = store.connect(a.db)
+    filters = {"for_username": a.for_user, "source": a.source, "distinct": not a.all}
+    if a.export:
+        n = store.export(db, a.export, **filters)
+        print(f"✓ {n} rows → {a.export}")
+        return 0
+    rows = store.list_suggestions(db, limit=a.limit, **filters)
+    for r in rows:
+        print(f"{r['ts']}  [{r['source']}] for @{r['for_username'] or '-'} → @{r['username']}"
+              f"  ({r['followers']} followers)  {(r['bio'] or '')[:60]!r}")
+    print(f"# {len(rows)} rows", file=sys.stderr)
+    return 0
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="tweetkit",
                                  description="Post/delete/read on X via your web session (no paid API).")
@@ -329,7 +441,58 @@ def build_parser():
     p.add_argument("id"); p.add_argument("--limit", type=int, default=100); p.set_defaults(func=_cmd_retweeters)
 
     # social graph — user actions
-    for name, method in [("follow", "follow"), ("unfollow", "unfollow"), ("block", "block"),
+    p = sub.add_parser("follow", help="follow a user (optionally + bell on)")
+    p.add_argument("user")
+    p.add_argument("--notify", action="store_true", help="also turn on notifications for all their posts")
+    p.add_argument("--dry-run", action="store_true", help="print the requests, send nothing")
+    p.set_defaults(func=_cmd_follow)
+
+    # per-account notifications + suggestions
+    p = sub.add_parser("friendship", help="relationship + bell/repost settings for a user")
+    p.add_argument("user"); p.set_defaults(func=_cmd_friendship)
+    p = sub.add_parser("notify", help="per-account bell: notify on all their posts (or --live)")
+    p.add_argument("user"); p.add_argument("state", choices=["on", "off"])
+    p.add_argument("--live", action="store_true", help="live-video notifications instead of posts")
+    p.add_argument("--dry-run", action="store_true"); p.set_defaults(func=_cmd_notify)
+    p = sub.add_parser("retweets", help="show/hide a followed user's reposts")
+    p.add_argument("user"); p.add_argument("state", choices=["on", "off"])
+    p.add_argument("--dry-run", action="store_true"); p.set_defaults(func=_cmd_retweets)
+
+    def bulk_args(p):
+        p.add_argument("--column", help="CSV column holding handles (default x_handle)")
+        p.add_argument("--journal", help="JSONL journal (default ~/.config/tweetkit/journals/<action>.jsonl)")
+        p.add_argument("--max", type=int, help="stop after N accounts that needed a write")
+        p.add_argument("--min-delay", type=float, help="min seconds between writes (default 30)")
+        p.add_argument("--max-delay", type=float, default=75.0, help="max seconds between writes (default 75)")
+        p.add_argument("--log", help="also append progress lines to this file")
+        p.add_argument("--dry-run", action="store_true", help="send no writes; journal to <journal>.dryrun.jsonl")
+
+    p = sub.add_parser("bulk-follow", help="follow (+bell on) every handle in a file — resumable")
+    p.add_argument("file", help=".csv (x_handle column), one-handle-per-line .txt, or -")
+    p.add_argument("--no-notify", action="store_true", help="follow only, leave the bell off")
+    p.add_argument("--no-suggestions", action="store_true", help="don't save post-follow suggestions")
+    bulk_args(p); p.set_defaults(func=_cmd_bulk_follow)
+    p = sub.add_parser("bulk-notify", help="bell on/off for every followed handle in a file — resumable")
+    p.add_argument("file"); p.add_argument("state", choices=["on", "off"])
+    p.add_argument("--live", action="store_true")
+    bulk_args(p); p.set_defaults(func=_cmd_bulk_notify)
+
+    p = sub.add_parser("suggest", help="fetch X's account suggestions and save them")
+    p.add_argument("user", nargs="?", help="@username (required for follow/sidebar)")
+    p.add_argument("--source", choices=["follow", "sidebar", "connect"], default="follow",
+                   help="follow=after-follow recs, sidebar='You might like', connect='Who to follow'")
+    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--no-save", action="store_true"); p.set_defaults(func=_cmd_suggest)
+    p = sub.add_parser("suggestions", help="list / export saved suggestions")
+    p.add_argument("--for", dest="for_user", help="only those suggested for @username")
+    p.add_argument("--source", choices=["follow", "sidebar", "connect"])
+    p.add_argument("--all", action="store_true", help="every saved row (default: latest per account)")
+    p.add_argument("--limit", type=int, default=100)
+    p.add_argument("--export", help="write to .csv / .json / .jsonl instead of printing")
+    p.add_argument("--db", help="SQLite path (default ~/.config/tweetkit/suggestions.sqlite)")
+    p.set_defaults(func=_cmd_suggestions)
+
+    for name, method in [("unfollow", "unfollow"), ("block", "block"),
                          ("unblock", "unblock"), ("mute", "mute"), ("unmute", "unmute")]:
         p = sub.add_parser(name, help=f"{name} a user")
         p.add_argument("user")

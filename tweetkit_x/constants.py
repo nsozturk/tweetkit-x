@@ -49,11 +49,45 @@ QUERY_IDS = {
     "Bookmarks": "-LGfdImKeQz0xS_jjUwzlA",
     "Likes": "JR2gceKucIKcVNB_9JkhsA",
     "NotificationsTimeline": "Ev6UMJRROInk_RMH2oVbBg",
+    # account suggestions (verified against the x.com web bundle, 2026-10-19)
+    "SidebarUserRecommendations": "BSYrSirC_dVN6R9Q0Mpmvg",   # profile "You might like"
+    "ConnectTabTimeline": "IMQS8zyOjCLnWBkm6wNcQg",           # /i/connect_people "Who to follow"
 }
+
+# Extra flags ConnectTabTimeline declares on top of USER_TWEETS_FEATURES.
+CONNECT_TAB_EXTRA_FEATURES = {
+    "rweb_sports_post_context_enabled": False,
+    "responsive_web_nested_quote_preview_enabled": True,
+    "responsive_web_enhance_cards_enabled": False,
+}
+
+SIDEBAR_RECS_FEATURES = {
+    "profile_label_improvements_pcf_label_in_post_enabled": True,
+    "responsive_web_profile_redirect_enabled": False,
+    "rweb_tipjar_consumption_enabled": False,
+    "verified_phone_label_enabled": False,
+    "responsive_web_graphql_timeline_navigation_enabled": True,
+}
+
+# Query params the web app adds to every v1.1 user/friendship call (`include_*` set).
+USER_INCLUDE_PARAMS = {
+    "include_profile_interstitial_type": "1", "include_blocking": "1",
+    "include_blocked_by": "1", "include_followed_by": "1", "include_want_retweets": "1",
+    "include_mute_edge": "1", "include_can_dm": "1", "include_can_media_tag": "1",
+    "include_ext_is_blue_verified": "1", "include_ext_verified_type": "1",
+    "include_ext_profile_image_shape": "1", "skip_status": "1",
+}
+
+# v1.1 error codes that mean "stop all writes now" (rate limit, follow limit,
+# account locked / suspended). Bulk runners halt on these or on HTTP 429.
+STOP_ERROR_CODES = {88: "rate limit exceeded", 161: "follow limit reached",
+                    326: "account locked", 64: "account suspended",
+                    185: "daily limit reached"}
 
 GQL_BASE = "https://x.com/i/api/graphql"
 UPLOAD_URL = "https://upload.x.com/i/media/upload.json"
-# Legacy v1.1 REST base — still live for social-graph actions (follow/block/mute/pin)
+# Legacy v1.1 REST base — still live for social-graph actions (follow/block/mute/pin,
+# per-user notifications via friendships/update, friendships/show, users/recommendations)
 # and media metadata (alt text). Auth is the same cookie + bearer + csrf.
 V11_BASE = "https://api.x.com/1.1"
 MEDIA_METADATA_URL = "https://upload.x.com/1.1/media/metadata/create.json"
