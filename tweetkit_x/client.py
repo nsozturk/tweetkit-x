@@ -1005,6 +1005,20 @@ def _epoch(created_at):
         return 0
 
 
+def _media(lg):
+    """Photos/videos/GIFs of a tweet's legacy object: [{type, url, alt_text, video_url?}]."""
+    out = []
+    for m in (lg.get("extended_entities") or lg.get("entities") or {}).get("media") or []:
+        item = {"type": m.get("type"), "url": m.get("media_url_https"),
+                "alt_text": m.get("ext_alt_text")}
+        mp4 = [v for v in (m.get("video_info") or {}).get("variants") or []
+               if v.get("content_type") == "video/mp4"]
+        if mp4:
+            item["video_url"] = max(mp4, key=lambda v: v.get("bitrate") or 0)["url"]
+        out.append(item)
+    return out
+
+
 def _walk_timeline(node, tweets, users, _cursor=None):
     """Recursively collect tweet 'legacy' objects, user handles, and the bottom cursor."""
     found_cursor = _cursor
@@ -1031,6 +1045,10 @@ def _walk_timeline(node, tweets, users, _cursor=None):
                     "likes": lg.get("favorite_count"), "retweets": lg.get("retweet_count"),
                     "replies": lg.get("reply_count"),
                     "is_reply": bool(lg.get("in_reply_to_status_id_str")),
+                    "reply_to_id": lg.get("in_reply_to_status_id_str"),
+                    "reply_to_user": lg.get("in_reply_to_screen_name"),
+                    "conversation_id": lg.get("conversation_id_str"),
+                    "media": _media(lg),
                 }
         if node.get("cursorType") == "Bottom" and node.get("value"):
             found_cursor = node["value"]

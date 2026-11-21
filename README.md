@@ -347,7 +347,7 @@ The raw cookie is never echoed back.
 | `get_my_tweets(limit?)` | Your own recent tweets, newest first |
 | `get_user_tweets(username, limit?)` | A user's recent tweets, newest first |
 | `search_my_tweets(query, regex?, limit?)` | Find your own tweets (local filter — great for cleanup) |
-| `get_tweet(tweet_id)` | Fetch one tweet by id |
+| `get_tweet(tweet_id)` | Fetch one tweet by id: text, author, counts, reply target, media (with alt text) |
 | `search_x(query, latest?, limit?)` | Search **all of X** (real search, supports operators) |
 | `get_home_timeline(following?, limit?)` | Your home feed (For You, or Following) |
 | `get_replies(tweet_id, limit?)` | A tweet's conversation (its replies) |

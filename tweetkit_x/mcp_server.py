@@ -304,7 +304,8 @@ def search_my_tweets(query: str, regex: bool = False, limit: int = 200) -> list[
 
 @mcp.tool()
 def get_tweet(tweet_id: str) -> dict:
-    """Fetch a single tweet by id (text, author, counts, url)."""
+    """Fetch a single tweet by id: text, author, counts, url, reply_to_id/reply_to_user,
+    conversation_id and media ([{type, url, alt_text, video_url?}])."""
     tk, err = _get_tk()
     if err:
         return {"ok": False, "error": err}

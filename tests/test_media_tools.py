@@ -83,8 +83,28 @@ def test_mcp_post_thread_images():
         assert out[0]["ok"] is False and "tweet 2" in out[0]["error"] and len(tk.tweets) == before
 
 
+def test_walk_reads_media_and_reply():
+    from tweetkit_x.client import _walk_timeline
+    payload = {"data": {"tweetResult": {"result": {"rest_id": "2", "legacy": {
+        "id_str": "2", "full_text": "2/ pic", "user_id_str": "9",
+        "in_reply_to_status_id_str": "1", "in_reply_to_screen_name": "me", "conversation_id_str": "1",
+        "extended_entities": {"media": [
+            {"type": "photo", "media_url_https": "https://pbs/a.jpg", "ext_alt_text": "alt a"},
+            {"type": "video", "media_url_https": "https://pbs/v.jpg", "video_info": {"variants": [
+                {"content_type": "application/x-mpegURL", "url": "m3u8"},
+                {"content_type": "video/mp4", "bitrate": 832000, "url": "low.mp4"},
+                {"content_type": "video/mp4", "bitrate": 2176000, "url": "high.mp4"}]}}]}}}}}}
+    tweets = {}
+    _walk_timeline(payload, tweets, {})
+    t = tweets["2"]
+    assert (t["reply_to_id"], t["reply_to_user"], t["conversation_id"]) == ("1", "me", "1")
+    assert t["media"] == [{"type": "photo", "url": "https://pbs/a.jpg", "alt_text": "alt a"},
+                          {"type": "video", "url": "https://pbs/v.jpg", "alt_text": None, "video_url": "high.mp4"}]
+
+
 if __name__ == "__main__":
     test_thread_items_validation()
     test_mcp_post_tweet_images()
     test_mcp_post_thread_images()
+    test_walk_reads_media_and_reply()
     print("media tools ok")
